@@ -5,4 +5,4 @@ def fetch_price(ticker):
     response = requests.get(url)
     price_data = response.json()
     return price_data[ticker]['usd']
-print(fetch_price(bitcoin)
+print(fetch_price(bitcoin))
