@@ -1,0 +1,3 @@
+sell_percentage_fee =input():
+
+x=(1/(1-sell_percent_fee)*((qty*price)+(qty*price)*buy_percent_fee)/current_price)
