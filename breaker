@@ -4,3 +4,5 @@ x=(1/(1-sell_percent_fee)*((qty*price)+(qty*price)*buy_percent_fee)/current_pric
 cost1=input('cost: ')
 y=(1-percent)*cost1
 z=(1-percent)*cost2
+if z-y < 0:
+     
