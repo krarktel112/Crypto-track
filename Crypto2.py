@@ -3,7 +3,6 @@ import time
 
 portfolio = {
     'BTC': 0,  # Amount of Bitcoin you own
-    'ETH': 0.000942,  # Amount of Ethereum you own
     'ETH': 0.37690818,  # Amount of Ethereum you own
     # Add more cryptocurrencies here
 }
