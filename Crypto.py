@@ -2,12 +2,7 @@ import requests
 import time
 
 portfolio = {
-    #'BTC': 0,  # Amount of Bitcoin you own
-    'ETH': 0.37785018,  # Amount of Ethereum you own
-    # Add more cryptocurrencies here
-}
-portfolio2 = {
-    #'BTC': 0,  # Amount of Bitcoin you own
+    'BTC': 0,  # Amount of Bitcoin you own
     'ETH': 0.000942,  # Amount of Ethereum you own
     # Add more cryptocurrencies here
 }
@@ -27,8 +22,7 @@ def display_portfolio(portfolio):
         value = amount * price
         total_value += value
         print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
-     print(f"Total Portfolio Value: ${total_value:.2f}\n")
-     
+    print(f"Total Portfolio Value: ${total_value:.2f}\n")
 
 def main():
     while True:
