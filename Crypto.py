@@ -22,6 +22,11 @@ def display_portfolio(portfolio):
         value = amount * price
         total_value += value
         print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
+            for ticker, amount in portfolio.items():
+        price = get_crypto_price(ticker)
+        value = amount * price
+        total_value += value
+        print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
     print(f"Total Portfolio Value: ${total_value:.2f}\n")
 
 def main():
