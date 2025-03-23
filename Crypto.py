@@ -33,7 +33,7 @@ def display_portfolio(portfolio):
         price = get_crypto_price(ticker)
         value = amount * price
         total_value += value
-    print(f"Total Reward Value: ${total_value:.2f}\n")
+     print(f"Total Reward Value: ${total_value:.2f}\n")
 
 def main():
     while True:
