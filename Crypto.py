@@ -27,6 +27,7 @@ def display_portfolio(portfolio):
 def main():
     while True:
         display_portfolio(portfolio)
+        display_portfolio(portfolio2)
         time.sleep(30)
 
 if __name__ == "__main__":
