@@ -3,10 +3,15 @@ import time
 
 portfolio = {
     'BTC': 0,  # Amount of Bitcoin you own
-    'ETH': 0.000942,  # Amount of Ethereum you own
+    'ETH': 0.37785018,  # Amount of Ethereum you own
     # Add more cryptocurrencies here
 }
 
+portfolio2 = {
+    'BTC': 0,  # Amount of Bitcoin you own
+    'ETH': 0.000942,  # Amount of Ethereum you own
+    # Add more cryptocurrencies here
+}
 # Note some tokens aren't available on Coinbase
 def get_crypto_price(ticker):
     url = f'https://api.coinbase.com/v2/prices/{ticker}-USD/spot'
