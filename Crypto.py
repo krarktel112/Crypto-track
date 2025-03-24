@@ -37,6 +37,7 @@ def display_portfolio2(portfolio2):
         value = amount * price
         total_value += value
     print(f"Total Reward Value: ${total_value:.2f}\n")
+
 def main():
     while True:
         display_portfolio(portfolio)
