@@ -29,10 +29,18 @@ def display_portfolio(portfolio):
         print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
     print(f"Total Portfolio Value: ${total_value:.2f}\n")
 
+def display_portfolio2(portfolio2):
+    print(f"----------------------------------------------------------\n")
+    total_value = 0.0
+    for ticker, amount in portfolio.items():
+        price = get_crypto_price(ticker)
+        value = amount * price
+        total_value += value
+    print(f"Total Reward Value: ${total_value:.2f}\n")
 def main():
     while True:
         display_portfolio(portfolio)
-        display_portfolio(portfolio2)
+        display_portfolio2(portfolio2)
         time.sleep(30)
 
 if __name__ == "__main__":
