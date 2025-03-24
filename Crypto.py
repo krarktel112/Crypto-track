@@ -1,5 +1,6 @@
 import requests
 import time
+import os
 
 portfolio = {
     'BTC': 0,  # Amount of Bitcoin you own
@@ -35,7 +36,7 @@ def main():
         display_portfolio(portfolio)
         display_portfolio(portfolio2)
         time.sleep(30)
+        clear()
 
-clear()
 if __name__ == "__main__":
     main()
