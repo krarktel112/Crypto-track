@@ -35,6 +35,7 @@ def main():
         display_portfolio(portfolio)
         display_portfolio(portfolio2)
         time.sleep(30)
+        clear()
 
 if __name__ == "__main__":
     main()
