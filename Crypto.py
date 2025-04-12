@@ -2,13 +2,13 @@ import requests, time, os, keyboard
 
 portfolio = {
     'BTC': 0,  # Amount of Bitcoin you own
-    'ETH': 0.37797165,  # Amount of Ethereum you own
+    'ETH': (value1),  # Amount of Ethereum you own
     # Add more cryptocurrencies here
 }
 
 portfolio2 = {
     'BTC': 0,  # Amount of Bitcoin you own
-    'ETH': 0.001063,  # Amount of Ethereum you own
+    'ETH': (value2),  # Amount of Ethereum you own
     # Add more cryptocurrencies here
 }
 # Note some tokens aren't available on Coinbase
@@ -58,6 +58,8 @@ while True:
 def on_key_press(event):
     if event.name == 'space':
         print("Spacebar pressed!")
+        value1 = input("Please enter new value:")
+        return value1
     elif event.name == 'esc':
         print("Escape key pressed, exiting...")
         return False
