@@ -1,6 +1,4 @@
-import requests
-import time
-import os
+import requests, time, os, keyboard 
 
 portfolio = {
     'BTC': 0,  # Amount of Bitcoin you own
@@ -56,6 +54,16 @@ while True:
       continue
     else:
         print("Invalid input. Continuing with the current value.")
+
+def on_key_press(event):
+    if event.name == 'space':
+        print("Spacebar pressed!")
+    elif event.name == 'esc':
+        print("Escape key pressed, exiting...")
+        return False
+
+keyboard.hook(on_key_press)
+keyboard.wait()
 
 def main():
     while True:
