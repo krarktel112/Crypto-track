@@ -30,6 +30,32 @@ def display_portfolio(portfolio):
         print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
     print(f"Total Portfolio Value: ${total_value:.2f}\n")
 
+def pause_and_adjust(value):
+    """Pauses the script, allows user to adjust a value, and returns the updated value."""
+    print(f"Current value: {value}")
+    try:
+        new_value = input("Enter a new value (or press Enter to keep the current value): ")
+        if new_value:
+            value = type(value)(new_value)  # Attempt to cast to the original type
+    except ValueError:
+         print("Invalid input. Keeping the current value.")
+    input("Press Enter to continue...")
+    return value
+
+# Example usage
+my_value = 10
+while True:
+    print(f"Processing with value: {my_value}")
+    # Simulate some processing
+    time.sleep(1)
+    
+    choice = input("Do you want to pause and adjust the value? (y/n): ")
+    if choice.lower() == 'y':
+        my_value = pause_and_adjust(my_value)
+    elif choice.lower() == 'n':
+      continue
+    else:
+        print("Invalid input. Continuing with the current value.")
 
 def main():
     while True:
