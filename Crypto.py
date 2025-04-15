@@ -1,4 +1,4 @@
-import requests, time, os, keyboard 
+import requests, time, os
 
 value1 = input("Total here:") or int(0)
 value2 = input("Bonus here:") or int(0)
