@@ -1,13 +1,15 @@
 import requests, time, os, keyboard 
 
+value1 = input("Total here:") or int(0)
+value2 = input("Bonus here:") or int(0)
 portfolio = {
-    'BTC': 0,  # Amount of Bitcoin you own
+    #'BTC': 0,  # Amount of Bitcoin you own
     'ETH': (value1),  # Amount of Ethereum you own
     # Add more cryptocurrencies here
 }
 
 portfolio2 = {
-    'BTC': 0,  # Amount of Bitcoin you own
+    #'BTC': 0,  # Amount of Bitcoin you own
     'ETH': (value2),  # Amount of Ethereum you own
     # Add more cryptocurrencies here
 }
@@ -39,33 +41,6 @@ def pause_and_adjust(value):
          print("Invalid input. Keeping the current value.")
     input("Press Enter to continue...")
     return value
-
-# Example usage
-my_value = 10
-while True:
-    print(f"Processing with value: {my_value}")
-    # Simulate some processing
-    time.sleep(1)
-    
-    choice = input("Do you want to pause and adjust the value? (y/n): ")
-    if choice.lower() == 'y':
-        my_value = pause_and_adjust(my_value)
-    elif choice.lower() == 'n':
-      continue
-    else:
-        print("Invalid input. Continuing with the current value.")
-
-def on_key_press(event):
-    if event.name == 'space':
-        print("Spacebar pressed!")
-        value1 = input("Please enter new value:")
-        return value1
-    elif event.name == 'esc':
-        print("Escape key pressed, exiting...")
-        return False
-
-keyboard.hook(on_key_press)
-keyboard.wait()
 
 def main():
     while True:
