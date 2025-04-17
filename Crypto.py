@@ -1,16 +1,14 @@
 import requests, time, os
 
-value1 = input("Total here:") or int(0)
-value2 = input("Bonus here:") or int(0)
 portfolio = {
     #'BTC': 0,  # Amount of Bitcoin you own
-    'ETH': (value1),  # Amount of Ethereum you own
+    'ETH': 0.37842539,  # Amount of Ethereum you own
     # Add more cryptocurrencies here
 }
 
 portfolio2 = {
     #'BTC': 0,  # Amount of Bitcoin you own
-    'ETH': (value2),  # Amount of Ethereum you own
+    'ETH': 0.001517,  # Amount of Ethereum you own
     # Add more cryptocurrencies here
 }
 # Note some tokens aren't available on Coinbase
