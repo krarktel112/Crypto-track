@@ -1,0 +1,5 @@
+cd
+rm -rf Crypto-track
+git clone
+cd Crypto-track
+python3 Crypto.py
