@@ -4,7 +4,22 @@ portfolio = {
     bitcoin:0.00008288
     ethereum:0.37887184
 }
-
+def process_text_file_to_dict(file_path):
+    data_dict = {}
+    try:
+        with open(file_path, 'r') as file:
+            for line in file:
+                key, value = line.strip().split(': ')  # Assuming key: value format
+                data_dict[key] = value
+    except FileNotFoundError:
+        print(f"Error: File not found at {file_path}")
+        return None
+    except ValueError:
+         print(f"Error: Invalid format in line: {line.strip()}")
+         return None
+    return data_dict
+file_path = Portfolio.txt
+file_path2 = Rewards.txt
 def fetch_price(ticker):
     url = 'https://api.coingecko.com/api/v3/simple/price?ids=' + ticker + '&vs_currencies=usd'
     response = requests.get(url)
