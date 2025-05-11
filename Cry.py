@@ -1,6 +1,10 @@
 import requests
 
-portfolio =
+portfolio = {
+    bitcoin:0.00008288
+    ethereum:0.37887184
+}
+
 def fetch_price(ticker):
     url = 'https://api.coingecko.com/api/v3/simple/price?ids=' + ticker + '&vs_currencies=usd'
     response = requests.get(url)
