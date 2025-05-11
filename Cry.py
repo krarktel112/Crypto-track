@@ -18,8 +18,8 @@ def process_text_file_to_dict(file_path):
          print(f"Error: Invalid format in line: {line.strip()}")
          return None
     return data_dict
-file_path = Portfolio.txt
-file_path2 = Rewards.txt
+file_path = 'Portfolio.txt'
+file_path2 = "Rewards.txt'
 def fetch_price(ticker):
     url = 'https://api.coingecko.com/api/v3/simple/price?ids=' + ticker + '&vs_currencies=usd'
     response = requests.get(url)
