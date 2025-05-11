@@ -6,8 +6,8 @@ def fetch_price(ticker):
     price_data = response.json()
     return price_data[ticker]['usd']
 x = fetch_price("bitcoin")
-current_value1 = x*0.00008288
-profit1 = round((x*0.00008288)-8), 2)
+current_value1 = round((x*0.00008288), 2)
+profit1 = round((x*0.00008288)-8)), 2)
 y = fetch_price("ethereum")
 current_value2 = round((y*0.37887184), ndigits)
 current_value3 = round((y*0.001963), 2)
