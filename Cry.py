@@ -7,4 +7,4 @@ def fetch_price(ticker):
     return price_data[ticker]['usd']
 x = fetch_price("bitcoin")
 print(x)
-print(0.00008288*x)
+print((0.00008288*x)-8)
