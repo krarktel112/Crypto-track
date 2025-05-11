@@ -6,5 +6,8 @@ def fetch_price(ticker):
     price_data = response.json()
     return price_data[ticker]['usd']
 x = fetch_price("bitcoin")
+y = fetch_price("ethereum")
 print(x)
 print((0.00008288*x)-8)
+print(y)
+
