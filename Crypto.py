@@ -27,30 +27,18 @@ def display_portfolio(portfolio, rewards):
         total_value += value
         print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
     print(f"Total Portfolio Value: ${total_value:.2f}\n")
-    for ticker, amount in portfolio.items():
+    print(total_value-1092.2)
+    total_value = 0.0
+    for ticker, amount in rewards.items():
         price = get_crypto_price(ticker)
         value = amount * price
         total_value += value
         print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
-    print(f"Total Portfolio Value: ${total_value:.2f}\n")
-
-
-def pause_and_adjust(value):
-    """Pauses the script, allows user to adjust a value, and returns the updated value."""
-    print(f"Current value: {value}")
-    try:
-        new_value = input("Enter a new value (or press Enter to keep the current value): ")
-        if new_value:
-            value = type(value)(new_value)  # Attempt to cast to the original type
-    except ValueError:
-         print("Invalid input. Keeping the current value.")
-    input("Press Enter to continue...")
-    return value
+    print(f"Total Reward Value: ${total_value:.2f}\n")
 
 def main():
     while True:
-        display_portfolio(portfolio)
-        display_portfolio(portfolio2)
+        display_portfolio(portfolio, portfolio2)
         time.sleep(30)
         os.system('clear')
 
