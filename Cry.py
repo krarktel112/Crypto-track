@@ -25,6 +25,15 @@ def fetch_price(ticker):
     response = requests.get(url)
     price_data = response.json()
     return price_data[ticker]['usd']
+def display_portfolio(portfolio):
+    print(f"----------------------------------------------------------\n")
+    total_value = 0.0
+    for ticker, amount in portfolio.items():
+        price = fetch_price(ticker)
+        value = amount * price
+        total_value += value
+        print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
+    print(f"Total Portfolio Value: ${total_value:.2f}\n")
 x = fetch_price("bitcoin")
 current_value1 = round((x*0.00008288), 2)
 profit1 = round(((x*0.00008288)-8), 2)
