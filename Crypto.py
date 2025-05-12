@@ -39,7 +39,7 @@ def display_portfolio(portfolio, rewards):
 
 def main():
     while True:
-        display_portfolio(portfolio, rewards)
+        display_portfolio(portfolio, portfolio2)
         time.sleep(30)
         os.system('clear')
 
