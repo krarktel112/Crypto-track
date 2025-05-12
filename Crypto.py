@@ -12,24 +12,7 @@ portfolio2 = {
     # Add more cryptocurrencies here
 }
 # Note some tokens aren't available on Coinbase
-def process_text_file_to_dict(file_path):
-    data_dict = {}
-    try:
-        with open(file_path, 'r') as file:
-            for line in file:
-                key, value = line.strip().split(': ')  # Assuming key: value format
-                data_dict[key] = value
-    except FileNotFoundError:
-        print(f"Error: File not found at {file_path}")
-        return None
-    except ValueError:
-         print(f"Error: Invalid format in line: {line.strip()}")
-         return None
-    return data_dict
-file_path = 'Portfolio.txt'
-file_path2 = 'Rewards.txt'
-portfolio = process_text_file_to_dict(file_path)
-rewards = process_text_file_to_dict(file_path2)
+
 def get_crypto_price(ticker):
     url = f'https://api.coinbase.com/v2/prices/{ticker}-USD/spot'
     response = requests.get(url)
