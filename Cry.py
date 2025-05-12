@@ -28,8 +28,17 @@ def fetch_price(ticker):
 def display_portfolio(portfolio):
     print(f"----------------------------------------------------------\n")
     total_value = 0.0
+    def display_portfolio(portfolio):
+    print(f"----------------------------------------------------------\n")
+    total_value = 0.0
     for ticker, amount in portfolio.items():
-        price = fetch_price(ticker)
+        price = get_crypto_price(ticker)
+        value = amount * price
+        total_value += value
+        print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
+    print(f"Total Portfolio Value: ${total_value:.2f}\n")"Total Portfolio Value: ${total_value:.2f}\n")
+    for ticker, amount in rewards.items():
+        price = get_crypto_price(ticker)
         value = amount * price
         total_value += value
         print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
