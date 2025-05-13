@@ -1,4 +1,5 @@
 import requests
+import winsound
 
 portfolio = {
     bitcoin:0.00008288
@@ -47,6 +48,10 @@ x = fetch_price("bitcoin")
 current_value1 = round((x*0.00008288), 2)
 profit1 = round(((x*0.00008288)-8), 2)
 y = fetch_price("ethereum")
+if y>= 2882.2:
+    winsound.PlaySound('path/to/your/audiofile.wav', winsound.SND_FILENAME)
+else:
+    zed == 0
 current_value2 = round((y*0.37887184), 2)
 current_value3 = round((y*0.001963), 2)
 profit2 = round(((y*0.37887184)-1092.2), 2)
