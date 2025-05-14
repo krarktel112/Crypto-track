@@ -26,7 +26,7 @@ def fetch_price(ticker):
     response = requests.get(url)
     price_data = response.json()
     return price_data[ticker]['usd']
-def display_portfolio(portfolio):
+def display_portfolio(file_path, file_path2):
     print(f"----------------------------------------------------------\n")
     total_value = 0.0
     def display_portfolio(portfolio):
