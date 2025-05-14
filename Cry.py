@@ -30,7 +30,7 @@ def display_portfolio(portfolio, rewards):
         price = fetch_price(ticker)
         price1 = round(price, 2)
         value = amount * price
-        total_value += float(value)
+        total_value += int(value)
         value1 = round(value, 2)
         #total_value1 = round(total_value, 2)
         print(f"{ticker}: ${price1} (You own {amount} {ticker}, Value: ${value1})")
@@ -39,7 +39,7 @@ def display_portfolio(portfolio, rewards):
         price = fetch_price(ticker)
         price1 = round(price, 2)
         value = amount * price
-        total_value += float(value)
+        total_value += int(value)
         value1 = round(value, 2)
         #total_value1 = round(total_value, 2)
         print(f"{ticker}: ${price1} (You own {amount} {ticker}, Value: ${value1})")
