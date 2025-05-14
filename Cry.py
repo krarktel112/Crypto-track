@@ -32,18 +32,18 @@ def display_portfolio(portfolio, rewards):
         value = amount * price
         total_value += float(value)
         value1 = round(value, 2)
-        total_value1 = round(total_value, 2)
+        #total_value1 = round(total_value, 2)
         print(f"{ticker}: ${price1} (You own {amount} {ticker}, Value: ${value1})")
-    print(f"Total Portfolio Value: ${total_value:.2f}\n")
+    #print(f"Total Portfolio Value: ${total_value1}\n")
     for ticker, amount in rewards.items():
         price = fetch_price(ticker)
         price1 = round(price, 2)
         value = amount * price
         total_value += float(value)
         value1 = round(value, 2)
-        total_value1 = round(total_value, 2)
+        #total_value1 = round(total_value, 2)
         print(f"{ticker}: ${price1} (You own {amount} {ticker}, Value: ${value1})")
-    print(f"Total Portfolio Value: ${total_value:.2f}\n")
+    #print(f"Total Portfolio Value: ${total_value:.2f}\n")
 
 #y = fetch_price("ethereum")
 #if y>= 2882.2:
