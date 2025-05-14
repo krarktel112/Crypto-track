@@ -1,10 +1,6 @@
 import requests
-import winsound
+#import winsound
 
-portfolio = {
-    bitcoin:0.00008288
-    ethereum:0.37887184
-}
 def process_text_file_to_dict(file_path):
     data_dict = {}
     try:
@@ -26,36 +22,34 @@ def fetch_price(ticker):
     response = requests.get(url)
     price_data = response.json()
     return price_data[ticker]['usd']
-def display_portfolio(file_path, file_path2):
+def display_portfolio(portfolio, rewards):
     print(f"----------------------------------------------------------\n")
     total_value = 0.0
     def display_portfolio(portfolio):
     print(f"----------------------------------------------------------\n")
     total_value = 0.0
     for ticker, amount in portfolio.items():
-        price = get_crypto_price(ticker)
+        price = fetch_price(ticker)
+        price1 = round(price, 2)
         value = amount * price
         total_value += value
-        print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
-    print(f"Total Portfolio Value: ${total_value:.2f}\n")"Total Portfolio Value: ${total_value:.2f}\n")
-    for ticker, amount in rewards.items():
-        price = get_crypto_price(ticker)
-        value = amount * price
-        total_value += value
-        print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
+        value1 = round(value, 2)
+        total_value1 = round(total_value, 2)
+        print(f"{ticker}: ${price1} (You own {amount} {ticker}, Value: ${value1})")
     print(f"Total Portfolio Value: ${total_value:.2f}\n")
-x = fetch_price("bitcoin")
-current_value1 = round((x*0.00008288), 2)
-profit1 = round(((x*0.00008288)-8), 2)
-y = fetch_price("ethereum")
-if y>= 2882.2:
-    winsound.PlaySound('path/to/your/audiofile.wav', winsound.SND_FILENAME)
-else:
-    zed == 0
-current_value2 = round((y*0.37887184), 2)
-current_value3 = round((y*0.001963), 2)
-profit2 = round(((y*0.37887184)-1092.2), 2)
-profit3 = current_value3
-print(f"Bitcoin: {x} | Current value: {current_value1} | Profit: {profit1}")
-print(f"Ethereum: {y} | Current value: {current_value2} | Profit: {profit2}")
-print(f"Ethereum: {y} | Current value: {current_value3} | Profit: {profit3}")
+    for ticker, amount in rewards.items():
+        price = fetch_price(ticker)
+        price1 = round(price, 2)
+        value = amount * price
+        total_value += value
+        value1 = round(value, 2)
+        total_value1 = round(total_value, 2)
+        print(f"{ticker}: ${price1} (You own {amount} {ticker}, Value: ${value1})")
+    print(f"Total Portfolio Value: ${total_value:.2f}\n")
+
+#y = fetch_price("ethereum")
+#if y>= 2882.2:
+#    winsound.PlaySound('path/to/your/audiofile.wav', winsound.SND_FILENAME)
+#else:
+#    zed == 0
+print(process_text_file_to_dict(file_path))
