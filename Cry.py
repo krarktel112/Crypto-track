@@ -22,10 +22,8 @@ def fetch_price(ticker):
     response = requests.get(url)
     price_data = response.json()
     return price_data[ticker]['usd']
+
 def display_portfolio(portfolio, rewards):
-    print(f"----------------------------------------------------------\n")
-    total_value = 0.0
-    def display_portfolio(portfolio):
     print(f"----------------------------------------------------------\n")
     total_value = 0.0
     for ticker, amount in portfolio.items():
