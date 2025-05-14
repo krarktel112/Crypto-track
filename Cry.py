@@ -52,5 +52,6 @@ def display_portfolio(portfolio, rewards):
 #    zed == 0
 port = process_text_file_to_dict(file_path)
 rew = process_text_file_to_dict(file_path2)
-print(port)
-print(rew)
+#print(port)
+#print(rew)
+display_portfolio(port, rew)
