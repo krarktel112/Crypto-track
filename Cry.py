@@ -50,4 +50,7 @@ def display_portfolio(portfolio, rewards):
 #    winsound.PlaySound('path/to/your/audiofile.wav', winsound.SND_FILENAME)
 #else:
 #    zed == 0
-print(process_text_file_to_dict(file_path))
+port = process_text_file_to_dict(file_path)
+rew = process_text_file_to_dict(file_path2)
+print(port)
+print(rew)
