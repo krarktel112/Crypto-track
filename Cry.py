@@ -23,6 +23,7 @@ def process_file_and_loop(file_path):
 
     for key, value in data_dict.items():
         print(f"Key: {key}, Value: {value}")
+    return data_dict
 
 # Example usage:
 file_path = 'Portfolio.txt'  # Replace with your file path
