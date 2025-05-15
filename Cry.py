@@ -41,7 +41,7 @@ def display_portfolio():
     total_value = 0.0
     file_path = 'Portfolio.txt'  # Replace with your file path
     file_path2 = 'Rewards.txt'
-    process_file_and_loop(file_path)
+    portfolio = process_file_and_loop(file_path)
     for ticker, amount in portfolio.items():
         price = int(fetch_price(ticker))
         price1 = round(price, 2)
@@ -52,7 +52,7 @@ def display_portfolio():
         print(f"{ticker}: ${price1} (You own {amount} {ticker}, Value: ${value1})")
     print(f"Total Portfolio Value: ${total_value1}\n")
     total_value = 0.0
-    process_file_and_loop(file_path2)
+    rewards = process_file_and_loop(file_path2)
     for ticker, amount in rewards.items():
         price = fetch_price(ticker)
         price1 = round(price, 2)
