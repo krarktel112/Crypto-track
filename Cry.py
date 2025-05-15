@@ -42,7 +42,7 @@ def display_portfolio(portfolio, rewards):
     for ticker, amount in portfolio.items():
         price = fetch_price(ticker)
         price1 = round(price, 2)
-        value = amount * price
+        value = amount * int(price)
         total_value += int(value)
         value1 = round(value, 2)
         #total_value1 = round(total_value, 2)
