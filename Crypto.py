@@ -2,13 +2,13 @@ import requests, time, os
 
 portfolio = {
     'BTC': 0.00008288,  # Amount of Bitcoin you own
-    'ETH': 0.37898136,  # Amount of Ethereum you own
+    'ETH': 0.37906705,  # Amount of Ethereum you own
     # Add more cryptocurrencies here
 }
 
 portfolio2 = {
     #'BTC': 0,  # Amount of Bitcoin you own
-    'ETH': 0.002073,  # Amount of Ethereum you own
+    'ETH': 0.002159,  # Amount of Ethereum you own
     # Add more cryptocurrencies here
 }
 # Note some tokens aren't available on Coinbase
