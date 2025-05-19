@@ -1,5 +1,4 @@
 import requests, time, os
-import pygame
 
 portfolio = {
     #'BTC': 0.0,  # Amount of Bitcoin you own
