@@ -1,4 +1,4 @@
-import requests, time, os, play-audio
+import requests, time, os
 
 portfolio = {
     #'BTC': 0.0,  # Amount of Bitcoin you own
