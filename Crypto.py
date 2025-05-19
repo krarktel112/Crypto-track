@@ -38,10 +38,10 @@ def display_portfolio(portfolio, rewards):
     print(f"Total Reward Value: ${total_value:.2f}\n")
     print(round(zed,2))
     ding = get_crypto_price("ETH")
-    if ding <= 2882.2:
-        play_audio.play("/data/data/com.termux/files/home/termux-melody-every-1-minut/melody1.mp3")
-    else:
-        ding == 0
+    #if ding <= 2882.2:
+        #play_audio.play("/data/data/com.termux/files/home/termux-melody-every-1-minut/melody1.mp3")
+    #else:
+        #ding == 0
 
 def main():
     while True:
