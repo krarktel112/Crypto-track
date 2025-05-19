@@ -1,4 +1,5 @@
 import requests, time, os
+from playsound import playsound
 
 portfolio = {
     #'BTC': 0.0,  # Amount of Bitcoin you own
