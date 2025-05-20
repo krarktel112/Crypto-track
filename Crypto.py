@@ -36,15 +36,14 @@ def display_portfolio(portfolio, rewards):
         total_value += value
         print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
     print(f"Total Reward Value: ${total_value:.2f}\n")
-    #print(round(zed,2))
     formatted_number = f"{zed:.2f}"
     print(formatted_number)
     ding = get_crypto_price("ETH")
-    #if ding <= 2882.2:
-        #zoink = "/data/data/com.termux/files/home/termux-melody-every-1-minut/melody1.mp3"
-        #os.system("play-audio " + zoink)
-    #else:
-        #ding == 0
+    if ding <= 2882.2:
+        ding == 0
+    else:
+        zoink = "/data/data/com.termux/files/home/termux-melody-every-1-minut/melody1.mp3"
+        os.system("play-audio " + zoink)
 
 def main():
     while True:
