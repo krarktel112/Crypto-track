@@ -1,5 +1,1 @@
-cd
-rm -rf Crypto-track
-git clone https://github.com/krarktel112/Crypto-track.git
-cd Crypto-track
-python3 Crypto.py
+cd && rm -rf Crypto-track && git clone https://github.com/krarktel112/Crypto-track.git && cd Crypto-track && python3 Crypto.py
