@@ -47,7 +47,10 @@ def display_portfolio(portfolio, rewards):
 
 def main():
     while True:
-        display_portfolio(portfolio, portfolio2)
+        try:
+            display_portfolio(portfolio, portfolio2)
+        except:
+            print("Error, retrying.")
         time.sleep(30)
         os.system('clear')
 
