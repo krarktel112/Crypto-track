@@ -2,13 +2,13 @@ import requests, time, os
 
 portfolio = {
     #'BTC': 0.0,  # Amount of Bitcoin you own
-    'ETH': 0.37937123,  # Amount of Ethereum you own
+    'ETH': 0.37944126,  # Amount of Ethereum you own
     # Add more cryptocurrencies here
 }
 
 portfolio2 = {
     #'BTC': 0,  # Amount of Bitcoin you own
-    'ETH': 0.002463,  # Amount of Ethereum you own
+    'ETH': 0.002533,  # Amount of Ethereum you own
     # Add more cryptocurrencies here
 }
 # Note some tokens aren't available on Coinbase
@@ -39,7 +39,7 @@ def display_portfolio(portfolio, rewards):
     formatted_number = f"${zed:.2f}"
     print(formatted_number)
     ding = get_crypto_price("ETH")
-    if ding <= 2882.36:
+    if ding <= 2882.28:
         ding == 0
     else:
         zoink = "/data/data/com.termux/files/home/termux-melody-every-1-minut/melody1.mp3"
