@@ -21,25 +21,27 @@ def get_crypto_price(ticker):
     data = response.json()
     return float(data['data']['amount'])
 
-def display_portfolio(portfolio, rewards):
+def display_portfolio(portfolio):
     print(f"----------------------------------------------------------\n")
     total_value = 0.0
+    Ethereum = 0
+    solo = 0
+    bitcoin = 1.8
     for ticker, amount in portfolio.items():
         price = get_crypto_price(ticker)
         value = amount * price
+        value2 = value - bitcoin
+        value3 = value - Ethereum 
+        value4 = value - solo
         total_value += value
-        print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
-    print(f"Total Portfolio Value: ${total_value:.2f}\n")
-    zed = total_value - 0
-    total_value = 0.0
-    for ticker, amount in rewards.items():
-        price = get_crypto_price(ticker)
-        value = amount * price
-        total_value += value
-        print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
-    print(f"Total Reward Value: ${total_value:.2f}\n")
-    formatted_number = f"${zed:.2f}"
-    print(formatted_number)
+        #print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
+        if ticker == "BTC":
+            print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f}, Profit: ${value2:.2f})")
+        elif ticker == "ETH":
+            print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f}, Profit: ${value3:.2f})")
+        elif ticker == "SOL":
+            print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f}, Profit: ${value4:.2f})")
+        print(f"Total Portfolio Value: ${total_value:.2f}\n")
     ding = get_crypto_price("ETH")
     if ding <= 2878.44:
         ding == 0
@@ -50,7 +52,7 @@ def display_portfolio(portfolio, rewards):
 def main():
     while True:
         try:
-            display_portfolio(portfolio, portfolio2)
+            display_portfolio(portfolio)
         except:
             print("Error, retrying.")
         time.sleep(30)
