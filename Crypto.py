@@ -30,17 +30,20 @@ def display_portfolio(portfolio):
     for ticker, amount in portfolio.items():
         price = get_crypto_price(ticker)
         value = amount * price
-        value2 = value - bitcoin
+        
         value3 = value - Ethereum 
         value4 = value - solo
         total_value += value
         #print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
         if ticker == "BTC":
+            value2 = value - bitcoin
             print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f}, Profit: ${value2:.2f})")
         elif ticker == "ETH":
-            print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f}, Profit: ${value3:.2f})")
+            value2 = value - Ethereum 
+            print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f}, Profit: ${value2:.2f})")
         elif ticker == "SOL":
-            print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f}, Profit: ${value4:.2f})")
+            value2 = value - solo
+            print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f}, Profit: ${value2:.2f})")
     print(f"Total Portfolio Value: ${total_value:.2f}\n")
     ding = get_crypto_price("ETH")
     if ding <= 2878.44:
