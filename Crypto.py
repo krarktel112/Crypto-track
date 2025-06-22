@@ -41,7 +41,7 @@ def display_portfolio(portfolio):
             print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f}, Profit: ${value3:.2f})")
         elif ticker == "SOL":
             print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f}, Profit: ${value4:.2f})")
-        print(f"Total Portfolio Value: ${total_value:.2f}\n")
+    print(f"Total Portfolio Value: ${total_value:.2f}\n")
     ding = get_crypto_price("ETH")
     if ding <= 2878.44:
         ding == 0
