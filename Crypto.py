@@ -21,7 +21,7 @@ def get_crypto_price(ticker):
     data = response.json()
     return float(data['data']['amount'])
 
-def display_portfolio(portfolio):
+def display_portfolio(portfolio, rewards):
     print(f"----------------------------------------------------------\n")
     total_value = 0.0
     total_profit = 0.0
@@ -46,6 +46,20 @@ def display_portfolio(portfolio):
             print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f}, Profit: ${value2:.2f})")
             total_profit += value2
     print(f"Total Portfolio Value: ${total_value:.2f} Total profit: ${total_profit:.2f}\n")
+    total_value = 0.0
+    total_profit = 0.0
+    for ticker, amount in rewards.items():
+        price = get_crypto_price(ticker)
+        value = amount * price
+        total_value += value
+        print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
+    print(f"Total Reward Value: ${total_value:.2f}\n")
+    ding = get_crypto_price("ETH")
+    if ding <= 3000:
+        ding == 0
+    else:
+        zoink = "/data/data/com.termux/files/home/termux-melody-every-1-minut/melody1.mp3"
+        os.system("play-audio " + zoink)
     ding = get_crypto_price("ETH")
     if ding <= 2878.44:
         ding == 0
@@ -56,7 +70,7 @@ def display_portfolio(portfolio):
 def main():
     while True:
         try:
-            display_portfolio(portfolio)
+            display_portfolio(portfolio, portfolio2)
         except:
             print("Error, retrying.")
         time.sleep(30)
