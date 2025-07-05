@@ -54,18 +54,6 @@ def display_portfolio(portfolio, rewards):
         total_value += value
         print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
     print(f"Total Reward Value: ${total_value:.2f}\n")
-    ding = get_crypto_price("ETH")
-    if ding <= 3000:
-        ding == 0
-    else:
-        zoink = "/data/data/com.termux/files/home/termux-melody-every-1-minut/melody1.mp3"
-        os.system("play-audio " + zoink)
-    ding = get_crypto_price("ETH")
-    if ding <= 2878.44:
-        ding == 0
-    else:
-        zoink = "/data/data/com.termux/files/home/termux-melody-every-1-minut/melody1.mp3"
-        os.system("play-audio " + zoink)
 
 def main():
     while True:
