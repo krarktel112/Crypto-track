@@ -2,14 +2,14 @@ import requests, time, os
 
 portfolio = {
     'BTC': 0.0000181,  # Amount of Bitcoin you own
-    'ETH': 0.00007161,  # Amount of Ethereum you own
+    'ETH': 0.0000716375,  # Amount of Ethereum you own
     'SOL': 0.001035166
     # Add more cryptocurrencies here
 }
 
 portfolio2 = {
     'BTC': 0,  # Amount of Bitcoin you own
-    'ETH': 0.00007161,  # Amount of Ethereum you own
+    'ETH': 0.0000716375,  # Amount of Ethereum you own
     'SOL': 0.0
     # Add more cryptocurrencies here
 }
