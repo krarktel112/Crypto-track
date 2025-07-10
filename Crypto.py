@@ -1,7 +1,7 @@
 import requests, time, os
 
 portfolio = {
-    'BTC': 0.00008126,  # Amount of Bitcoin you own
+    'BTC': 0.00088778,  # Amount of Bitcoin you own
     'ETH': 0.0000716375,  # Amount of Ethereum you own
     'SOL': 0.001035166
     # Add more cryptocurrencies here
@@ -27,7 +27,7 @@ def display_portfolio(portfolio, rewards):
     total_profit = 0.0
     ethereum = 0
     solo = 0
-    bitcoin = 9.8
+    bitcoin = 104.75
     for ticker, amount in portfolio.items():
         price = get_crypto_price(ticker)
         value = amount * price
