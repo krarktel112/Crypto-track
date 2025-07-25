@@ -25,7 +25,7 @@ def display_portfolio(portfolio, rewards):
     print(f"----------------------------------------------------------\n")
     total_value = 0.0
     total_profit = 0.0
-    ethereum = 0
+    ethereum = 10
     solo = 0
     bitcoin = 189.48
     for ticker, amount in portfolio.items():
