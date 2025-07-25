@@ -27,7 +27,7 @@ def display_portfolio(portfolio, rewards):
     total_profit = 0.0
     ethereum = 10
     solo = 0
-    bitcoin = 189.48
+    bitcoin = 179.48
     for ticker, amount in portfolio.items():
         price = get_crypto_price(ticker)
         value = amount * price
