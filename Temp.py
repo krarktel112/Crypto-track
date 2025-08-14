@@ -24,7 +24,7 @@ def calculate_bitcoin_break_even(initial_investment, buy_fee_percentage, sell_fe
     return break_even_price
 
 # Example Usage:
-initial_investment = 100  # $1000 USD
+initial_investment = 1000  # $1000 USD
 buy_fee_percentage = 0.02  # 0.1% buy fee
 sell_fee_percentage = 0.02  # 0.1% sell fee
 bitcoin_price_at_purchase = 116000  # Bitcoin price at time of purchase
