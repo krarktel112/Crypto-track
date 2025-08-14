@@ -1,4 +1,4 @@
-def calculate_bitcoin_break_even:
+def calculate_bitcoin_break_even():
     """
     Calculates the break-even price for a Bitcoin trade, including buy and sell fees.
 
