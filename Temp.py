@@ -29,6 +29,6 @@ def calculate_bitcoin_break_even():
 
 # Example Usage:
 
-break_even = calculate_bitcoin_break_even(initial_investment, buy_fee_percentage, sell_fee_percentage, bitcoin_price_at_purchase)
+break_even = calculate_bitcoin_break_even()
 
 print(f"The break-even price for your Bitcoin trade is: ${break_even:.2f}") 
