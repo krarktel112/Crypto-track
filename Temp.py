@@ -1,4 +1,4 @@
-def calculate_bitcoin_break_even():
+def calculate_bitcoin_break_even(initial_investment, buy_fee_percentage, sell_fee_percentage, bitcoin_price_at_purchase):
     """
     Calculates the break-even price for a Bitcoin trade, including buy and sell fees.
 
@@ -11,10 +11,6 @@ def calculate_bitcoin_break_even():
     Returns:
         float: The break-even price per Bitcoin.
     """
-    initial_investment = input("Investment:") # $1000 USD
-    buy_fee_percentage = 0.02  # 0.1% buy fee
-    sell_fee_percentage = 0.02  # 0.1% sell fee
-    bitcoin_price_at_purchase = input("Price:") # Bitcoin price at time of purchase
 
     # Calculate the amount of Bitcoin purchased
     bitcoin_purchased = (initial_investment * (1 - buy_fee_percentage)) / bitcoin_price_at_purchase  # Note: assuming buy_fee is applied to the fiat amount
@@ -28,7 +24,11 @@ def calculate_bitcoin_break_even():
     return break_even_price
 
 # Example Usage:
+initial_investment = 100  # $1000 USD
+buy_fee_percentage = 0.02  # 0.1% buy fee
+sell_fee_percentage = 0.02  # 0.1% sell fee
+bitcoin_price_at_purchase = 116000  # Bitcoin price at time of purchase
 
-break_even = calculate_bitcoin_break_even()
+break_even = calculate_bitcoin_break_even(initial_investment, buy_fee_percentage, sell_fee_percentage, bitcoin_price_at_purchase)
 
 print(f"The break-even price for your Bitcoin trade is: ${break_even:.2f}") 
