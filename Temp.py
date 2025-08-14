@@ -5,9 +5,7 @@ bitcoin_price_at_purchase = input("Price:") # Bitcoin price at time of purchase
 
 
     # Calculate the amount of Bitcoin purchased
-bitcoin_purchased = (int(initial_investment) * (1 - buy_fee_percentage)) / bitcoin_price_at_purchase  # Note: assuming buy_fee is applied to the fiat amount
-
-    # Calculate the total cost including fees for the trade
+bitcoin_purchased = (initial_investment * (1 - buy_fee_percentage)) / bitcoin_price_at_purchase
 total_cost = initial_investment + (initial_investment * buy_fee_percentage) 
 
     # Calculate the break-even selling price (accounting for the sell fee as a percentage of the selling price)
