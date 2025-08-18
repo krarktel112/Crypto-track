@@ -1,3 +1,11 @@
+import requests 
+
+def get_crypto_price(ticker):
+    url = f'https://api.coinbase.com/v2/prices/{ticker}-USD/spot'
+    response = requests.get(url)
+    data = response.json()
+    return float(data['data']['amount'])
+
 def calculate_bitcoin_break_even(initial_investment, buy_fee_percentage, sell_fee_percentage, bitcoin_price_at_purchase):
     """
     Calculates the break-even price for a Bitcoin trade, including buy and sell fees.
