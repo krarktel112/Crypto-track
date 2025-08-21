@@ -49,3 +49,10 @@ break_even8 = calculate_bitcoin_break_even(initial_investment, 0.0075, 0.0075, b
 
 print(f"The break-even price for your Bitcoin trade is: ${break_even:.2f}") 
 print(f"The break-even price for your Bitcoin trade is: ${break_even1:.2f}") 
+print(f"The break-even price for your Bitcoin trade is: ${break_even2:.2f}") 
+print(f"The break-even price for your Bitcoin trade is: ${break_even3:.2f}") 
+print(f"The break-even price for your Bitcoin trade is: ${break_even4:.2f}") 
+print(f"The break-even price for your Bitcoin trade is: ${break_even5:.2f}") 
+print(f"The break-even price for your Bitcoin trade is: ${break_even6:.2f}") 
+print(f"The break-even price for your Bitcoin trade is: ${break_even7:.2f}") 
+print(f"The break-even price for your Bitcoin trade is: ${break_even8:.2f}") 
