@@ -35,6 +35,27 @@ def calculate_bitcoin_break_even(initial_investment, buy_fee_percentage, sell_fe
 initial_investment = input("Investment:") # $1000 USD
 buy_fee_percentage = 0.02  # 0.1% buy fee
 sell_fee_percentage = 0.02  # 0.1% sell fee
+bitcoin_price_at_purchase = input("Price:") # Bitcoin price at time of purchase
+
+break_even = calculate_bitcoin_break_even(initial_investment, buy_fee_percentage, sell_fee_percentage, bitcoin_price_at_purchase)
+break_even1 = calculate_bitcoin_break_even(initial_investment, 0.03, 0.03, bitcoin_price_at_purchase)
+break_even2 = calculate_bitcoin_break_even(initial_investment, 0.0225, 0.0225, bitcoin_price_at_purchase)
+break_even3 = calculate_bitcoin_break_even(initial_investment, 0.02, 0.02, bitcoin_price_at_purchase)
+break_even4 = calculate_bitcoin_break_even(initial_investment, 0.0175, 0.0175, bitcoin_price_at_purchase)
+break_even5 = calculate_bitcoin_break_even(initial_investment, 0.015, 0.015, bitcoin_price_at_purchase)
+break_even6 = calculate_bitcoin_break_even(initial_investment, 0.0125, 0.0125, bitcoin_price_at_purchase)
+break_even7 = calculate_bitcoin_break_even(initial_investment, 0.01, 0.01, bitcoin_price_at_purchase)
+break_even8 = calculate_bitcoin_break_even(initial_investment, 0.0075, 0.0075, bitcoin_price_at_purchase)
+
+print(f"The break-even price for your Bitcoin trade is: ${break_even:.2f}") 
+print(f"The break-even price for your Bitcoin trade is: ${break_even1:.2f}") 
+print(f"The break-even price for your Bitcoin trade is: ${break_even2:.2f}") 
+print(f"The break-even price for your Bitcoin trade is: ${break_even3:.2f}") 
+print(f"The break-even price for your Bitcoin trade is: ${break_even4:.2f}") 
+print(f"The break-even price for your Bitcoin trade is: ${break_even5:.2f}") 
+print(f"The break-even price for your Bitcoin trade is: ${break_even6:.2f}") 
+print(f"The break-even price for your Bitcoin trade is: ${break_even7:.2f}") 
+print(f"The break-even price for your Bitcoin trade is: ${break_even8:.2f}") sell_fee_percentage = 0.02  # 0.1% sell fee
 bitcoin_price_at_purchase = get_crypto_price(BTC) # Bitcoin price at time of purchase
 
 break_even = calculate_bitcoin_break_even(initial_investment, buy_fee_percentage, sell_fee_percentage, bitcoin_price_at_purchase)
