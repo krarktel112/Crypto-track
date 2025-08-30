@@ -26,6 +26,8 @@ def sell():
     elif x > 5000:
         y = 0.0075
     else:
+        quit()
+    return y
 $1000.01 - $2000 
 1.5%
 
