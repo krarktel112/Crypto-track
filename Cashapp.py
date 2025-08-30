@@ -8,6 +8,16 @@ if value >= lower_bound and value <= upper_bound:
 # Using chained comparison
 if lower_bound <= value <= upper_bound:
     print(f"{value} is between {lower_bound} and {upper_bound} (inclusive).")
+def sell():
+    if x < 10:
+        y = 0.03
+    x <= 100:
+    x <= 200
+    x <= 1000:
+    x <= 3000:
+    x <= 5000:
+    x > 5000:
+
 $0 - $9.99
 3%
 
