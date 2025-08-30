@@ -1,6 +1,8 @@
 import requests, time, os
 
 def sell(x):
+    y = int(x)
+    x = y
     if x < 10:
         y = 0.03
     elif x <= 100:
