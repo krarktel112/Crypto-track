@@ -1,8 +1,8 @@
 rate = input("Rate: ") or 0
-ot = rate*1.5
+ot = int(rate)*1.5
 hours = input("Hours: ") or 0
 minutes = input("Minutes: ") or 0
-minutes = minutes / 60
+minutes = int(minutes) / 60
 hours = hours + minutes 
 if hours <= 40:
   gross = hours * rate
