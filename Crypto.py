@@ -9,7 +9,7 @@ portfolio = {
 
 portfolio2 = {
     #'BTC': 0,  # Amount of Bitcoin you own
-    'ETH': 0.0000957796,  # Amount of Ethereum you own
+    'ETH': 0.00011092,  # Amount of Ethereum you own
     'SOL': 0.001039295
     # Add more cryptocurrencies here
 }
