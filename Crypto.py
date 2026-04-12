@@ -1,16 +1,18 @@
 import requests, time, os
 
 portfolio = {
-    'BTC': 0.0004826,  # Amount of Bitcoin you own
-    'ETH': 0.027927549,  # Amount of Ethereum you own
-    'SOL': 0.001039295
+    #'BTC': 0,  # Amount of Bitcoin you own
+    'ETH': 0.04303869,  # Amount of Ethereum you own
+    'SOL': 0.05510602
     # Add more cryptocurrencies here
 }
 
 portfolio2 = {
-    'BTC': 0.000066,  # Amount of Bitcoin you own
-    'ETH': 0.000124599,  # Amount of Ethereum you own
-    'SOL': 0.001039295
+    #0.043038690 eth
+    #0.054997936 sol
+    #'BTC': 0.000066,  # Amount of Bitcoin you own
+    'ETH': 0.00284569,  # Amount of Ethereum you own
+    'SOL': 0.000108084
     # Add more cryptocurrencies here
 }
 # Note some tokens aren't available on Coinbase
