@@ -2,16 +2,16 @@ import requests, time, os
 
 portfolio = {
     #'BTC': 0,  # Amount of Bitcoin you own
-    'ETH': 0.04303869,  # Amount of Ethereum you own
+    'ETH': 0.04282419,  # Amount of Ethereum you own
     'SOL': 0.05510602
     # Add more cryptocurrencies here
 }
 
 portfolio2 = {
-    #0.043038690 eth
+    #0.04282419 eth
     #0.054997936 sol
     #'BTC': 0.000066,  # Amount of Bitcoin you own
-    'ETH': 0.00284569,  # Amount of Ethereum you own
+    'ETH': 0.0002145,  # Amount of Ethereum you own
     'SOL': 0.000108084
     # Add more cryptocurrencies here
 }
@@ -27,7 +27,7 @@ def display_portfolio(portfolio, rewards):
     print(f"----------------------------------------------------------\n")
     total_value = 0.0
     total_profit = 0.0
-    ethereum = 89.32
+    ethereum = 99.22
     solo = 4.8
     bitcoin = 0
     for ticker, amount in portfolio.items():
