@@ -28,7 +28,7 @@ def get_crypto_price(ticker):
     data = response.json()
     return float(data['data']['amount'])
 
-def display_portfolio(portfolio, rewards):
+def display_portfolio(portfolio, rewards, lost):
     print(f"----------------------------------------------------------\n")
     total_value = 0.0
     total_profit = 0.0
