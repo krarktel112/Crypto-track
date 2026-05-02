@@ -17,7 +17,7 @@ portfolio2 = {
 }
 
 portfolio3 = {
-    'BTC': 0.000066,  # Amount of Bitcoin you own
+    'BTC': 0.03474519,  # Amount of Bitcoin you own
     # Add more cryptocurrencies here
 }
 # Note some tokens aren't available on Coinbase
