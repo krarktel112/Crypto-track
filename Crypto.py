@@ -15,6 +15,11 @@ portfolio2 = {
     'SOL': 0.000221137
     # Add more cryptocurrencies here
 }
+
+portfolio3 = {
+    'BTC': 0.000066,  # Amount of Bitcoin you own
+    # Add more cryptocurrencies here
+}
 # Note some tokens aren't available on Coinbase
 
 def get_crypto_price(ticker):
@@ -60,7 +65,7 @@ def display_portfolio(portfolio, rewards):
 def main():
     while True:
         try:
-            display_portfolio(portfolio, portfolio2)
+            display_portfolio(portfolio, portfolio2, portfolio3)
         except:
             print("Error, retrying.")
         time.sleep(30)
