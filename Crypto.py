@@ -57,37 +57,10 @@ def display_portfolio(portfolio, rewards):
         print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
     print(f"Total Reward Value: ${total_value:.2f}\n")
 def conversion():
-    total_value = 0.0
-    total_profit = 0.0
-    ethereum = 99.22
-    solo = 4.8
-    bitcoin = 0
-    for ticker, amount in portfolio.items():
-        price = get_crypto_price(ticker)
-        value = amount * price
-        total_value += value
-        #print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
-        if ticker == "BTC":
-            value2 = value - value 
-            print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f}, Profit: ${value2:.2f})")
-            total_profit += value2
-        elif ticker == "ETH":
-            value2 = value - ethereum - (value * 0.02)
-            print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f}, Profit: ${value2:.2f})")
-            total_profit += value2
-        elif ticker == "SOL":
-            value2 = value - solo - (value * 0.02)
-            print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f}, Profit: ${value2:.2f})")
-            total_profit += value2
-    print(f"Total Portfolio Value: ${total_value:.2f} Total profit: ${total_profit:.2f}\n")
-    total_value = 0.0
-    total_profit = 0.0
-    for ticker, amount in rewards.items():
-        price = get_crypto_price(ticker)
-        value = amount * price
-        total_value += value
-        print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
-    print(f"Total Reward Value: ${total_value:.2f}\n")
+    bitcoin = get_crypto_price("BTC")
+    ethereum = get_crypto_price("ETH")
+    value = bitcoin/ethereum 
+    print(value)
 
 def main():
     while True:
