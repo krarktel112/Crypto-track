@@ -62,7 +62,7 @@ def main():
         try:
             display_portfolio(portfolio, portfolio2)
             con = int(0.16027456)
-            print(((get_crypto_price(BTC)*con)/get_crypto_price(ETH))*0.15)
+            print(((get_crypto_price("BTC")*con)/get_crypto_price("ETH"))*0.15)
         except:
             print("Error, retrying.")
         time.sleep(30)
