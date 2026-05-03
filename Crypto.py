@@ -1,7 +1,7 @@
 import requests, time, os
 
 portfolio = {
-    #'BTC': 0,  # Amount of Bitcoin you own
+    'BTC': 0.16027456,  # Amount of Bitcoin you own
     'ETH': 0.04307645,  # Amount of Ethereum you own
     'SOL': 0.055219073
     # Add more cryptocurrencies here
@@ -13,11 +13,6 @@ portfolio2 = {
     #'BTC': 0.000066,  # Amount of Bitcoin you own
     'ETH': 0.00025226,  # Amount of Ethereum you own
     'SOL': 0.000221137
-    # Add more cryptocurrencies here
-}
-
-portfolio3 = {
-    'BTC': 0.03474519,  # Amount of Bitcoin you own
     # Add more cryptocurrencies here
 }
 # Note some tokens aren't available on Coinbase
@@ -41,7 +36,7 @@ def display_portfolio(portfolio, rewards, lost):
         total_value += value
         #print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
         if ticker == "BTC":
-            value2 = value - bitcoin - (value * 0.02)
+            value2 = value - value 
             print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f}, Profit: ${value2:.2f})")
             total_profit += value2
         elif ticker == "ETH":
