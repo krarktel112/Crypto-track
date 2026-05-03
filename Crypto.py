@@ -62,7 +62,7 @@ def main():
         try:
             display_portfolio(portfolio, portfolio2)
             con = int(0.16027456)*(get_crypto_price("BTC"))
-            print(
+            print(print(f"${con:.2f})
         except:
             print("Error, retrying.")
         time.sleep(30)
