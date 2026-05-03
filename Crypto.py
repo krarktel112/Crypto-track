@@ -60,7 +60,7 @@ def display_portfolio(portfolio, rewards):
 def main():
     while True:
         try:
-            display_portfolio(portfolio, portfolio2, portfolio3)
+            display_portfolio(portfolio, portfolio2)
         except:
             print("Error, retrying.")
         time.sleep(30)
