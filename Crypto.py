@@ -61,7 +61,7 @@ def conversion():
     ethereum = get_crypto_price("ETH")
     value = bitcoin/ethereum  
     value2 = int(value) * int(0.16027456) * int(0.15)
-    print(value)
+    print(value*0.15*0.16027456)
     print(f"${value2:.2f}")
 
 def main():
