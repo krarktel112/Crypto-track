@@ -61,8 +61,14 @@ def main():
     while True:
         try:
             display_portfolio(portfolio, portfolio2)
-            con = int(0.16027456)*(get_crypto_price("BTC"))
-            print(print(f"${con:.2f}"))
+            priceb = get_crypto_price("BTC")
+            pricee = get_crypto_price("ETH")
+            amount = 0.16027456
+            stake = 0.15
+            con1 = amount * price
+            con2 = con1 / prices
+            con3 = con2 * stake
+            print(print(f"${con3:.2f}"))
         except:
             print("Error, retrying.")
         time.sleep(30)
