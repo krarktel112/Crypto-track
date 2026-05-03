@@ -68,7 +68,7 @@ def main():
             con1 = amount * price
             con2 = con1 / prices
             con3 = con2 * stake
-            print(print(f"${con3:.2f}"))
+            print((f"${con3:.2f}"))
         except:
             print("Error, retrying.")
         time.sleep(30)
