@@ -59,7 +59,7 @@ def display_portfolio(portfolio, rewards):
 def conversion():
     bitcoin = get_crypto_price("BTC")
     ethereum = get_crypto_price("ETH")
-    value = (bitcoin*0.16027456)/ethereum  
+    value = ((((bitcoin*0.16027456)/ethereum)/0.04307645)*0.15)
     value2 = int(value) * int(0.16027456) * int(0.15)
     print(value)
 
