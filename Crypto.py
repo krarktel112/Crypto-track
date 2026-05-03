@@ -36,7 +36,7 @@ def display_portfolio(portfolio, rewards):
         total_value += value
         #print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
         if ticker == "BTC":
-            value2 = value
+            value2 = value - value 
             print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f}, Profit: ${value2:.2f})")
             total_profit += value2
         elif ticker == "ETH":
