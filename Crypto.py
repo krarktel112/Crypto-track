@@ -61,6 +61,7 @@ def conversion():
     ethereum = get_crypto_price("ETH")
     value = bitcoin/ethereum 
     print(value)
+    print(f"${value:.2f}")
 
 def main():
     while True:
