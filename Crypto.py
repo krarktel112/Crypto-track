@@ -66,6 +66,7 @@ def main():
     while True:
         try:
             display_portfolio(portfolio, portfolio2)
+            conversion()
         except:
             print("Error, retrying.")
         time.sleep(30)
