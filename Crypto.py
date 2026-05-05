@@ -1,7 +1,7 @@
 import requests, time, os
 
 portfolio = {
-    'BTC': 0.16027456,  # Amount of Bitcoin you own
+    #'BTC': 0,  # Amount of Bitcoin you own
     'ETH': 0.04307645,  # Amount of Ethereum you own
     'SOL': 0.055219073
     # Add more cryptocurrencies here
@@ -59,9 +59,9 @@ def display_portfolio(portfolio, rewards):
 def conversion():
     bitcoin = get_crypto_price("BTC")
     ethereum = get_crypto_price("ETH")
-    value = ((((bitcoin*0.16027456)/ethereum)/0.04307645)*0.15)
+    value = (((9216.3/ethereum)/0.04307645)*0.15)
     rounded_num = round(value, 2)
-    value2 = int(value) * int(0.16027456) * int(0.15)
+    
     print("$", rounded_num)
 
 def main():
