@@ -62,11 +62,11 @@ def conversion():
     solana = get_crypto_price("SOL")
     recover = ((9216.3*0.8)+1000-600-1219.02-1469.95)
     value = (((recover/ethereum)/0.04307645)*0.15)
-    value = (((recover/solana)/0.000277492)*0.01)
+    value2 = (((recover/solana)/0.000277492)*0.01)
     rounded_num = round(value, 2)
     rounded_num2 = round(value2, 2)    
     print("$", rounded_num)
-    
+    print("$", rounded_num2)
 
 def main():
     while True:
