@@ -59,7 +59,7 @@ def display_portfolio(portfolio, rewards):
 def conversion():
     bitcoin = get_crypto_price("BTC")
     ethereum = get_crypto_price("ETH")
-    recover = ((10216.3*0.8)-600-1219.02-1469.95)
+    recover = ((9216.3*0.8)+1000-600-1219.02-1469.95)
     value = (((recover/ethereum)/0.04307645)*0.15)
     rounded_num = round(value, 2)
     
