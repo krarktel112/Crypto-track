@@ -65,8 +65,8 @@ def conversion():
     value2 = (((recover/solana)/0.051702936)*0.01)
     rounded_num = round(value, 2)
     rounded_num2 = round(value2, 2)
-    print(f"Ethereum {ethereum*recover}: ${value:.2f})")
-    print(f"Solana {solana*recover}: ${value2:.2f})")
+    print(f"Ethereum {ethereum/recover}: ${value:.2f})")
+    print(f"Solana {solana/recover}: ${value2:.2f})")
 
 def main():
     while True:
