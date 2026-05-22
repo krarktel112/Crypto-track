@@ -63,10 +63,14 @@ def conversion():
     recover = ((9216.3*0.8)+1000-600-1219.02-1469.95)
     value = (((recover/ethereum)/0.04307645)*0.15)
     value2 = (((recover/solana)/0.051702936)*0.01)
+    x = ethereum/recover
+    y = recover/solana
     rounded_num = round(value, 2)
     rounded_num2 = round(value2, 2)
-    print(f"Ethereum {ethereum/recover}: ${value:.2f})")
-    print(f"Solana {recover/solana}: ${value2:.2f})")
+    rounded_num3 = round(x, 5)
+    rounded_num4 = round(y, 5)
+    print(f"Ethereum {rounded_num3}: ${value:.2f}")
+    print(f"Solana {rounded_num4}: ${value2:.2f}")
 
 def main():
     while True:
