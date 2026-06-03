@@ -3,7 +3,7 @@ import requests, time, os
 portfolio = {
     #'BTC': 0,  # Amount of Bitcoin you own
     'ETH': 0.00000364,  # Amount of Ethereum you own
-    'SOL': 0.051787314
+    'SOL': 0.051808054
     # Add more cryptocurrencies here
 }
 
