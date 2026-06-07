@@ -88,12 +88,29 @@ def conversion2():
     print(f"Ethereum {rounded_num3}: ${value:.2f}")
     print(f"Solana {rounded_num4}: ${value2:.2f}")
 
+def conversion3():
+    bitcoin = get_crypto_price("BTC")
+    ethereum = get_crypto_price("ETH")
+    solana = get_crypto_price("SOL")
+    recover = (10216.3-7457.01)
+    value = (((recover/ethereum)/0.04307645)*0.15)
+    value2 = (((recover/solana)/0.051702936)*0.01)
+    x = ethereum/recover
+    y = recover/solana
+    rounded_num = round(value, 2)
+    rounded_num2 = round(value2, 2)
+    rounded_num3 = round(x, 5)
+    rounded_num4 = round(y, 5)
+    print(f"Ethereum {rounded_num3}: ${value:.2f}")
+    print(f"Solana {rounded_num4}: ${value2:.2f}")
+
 def main():
     while True:
         try:
             display_portfolio(portfolio, portfolio2)
             conversion()
             conversion2()
+            conversion3()
         except:
             print("Error, retrying.")
         time.sleep(30)
