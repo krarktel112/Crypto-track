@@ -61,6 +61,7 @@ def conversion():
     ethereum = get_crypto_price("ETH")
     solana = get_crypto_price("SOL")
     recover = (10216.3-600-4000)
+    recover2 = (
     value = (((recover/ethereum)/0.04307645)*0.15)
     value2 = (((recover/solana)/0.051702936)*0.01)
     x = ethereum/recover
