@@ -79,7 +79,7 @@ def conversion2():
     recover = (10216.3-4788.79)
     value = (((recover/ethereum)/0.04307645)*0.15)
     value2 = (((recover/solana)/0.051702936)*0.01)
-    x = ethereum/recover
+    x = recover/ethereum 
     y = recover/solana
     rounded_num = round(value, 2)
     rounded_num2 = round(value2, 2)
@@ -95,7 +95,7 @@ def conversion3():
     recover = (10216.3-(4788.79*2))
     value = (((recover/ethereum)/0.04307645)*0.15)
     value2 = (((recover/solana)/0.051702936)*0.01)
-    x = ethereum/recover
+    x = recover/ethereum 
     y = recover/solana
     rounded_num = round(value, 2)
     rounded_num2 = round(value2, 2)
