@@ -56,6 +56,7 @@ def display_portfolio(portfolio, rewards):
         total_value += value
         print(f"{ticker}: ${price:.2f} (You own {amount} {ticker}, Value: ${value:.2f})")
     print(f"Total Reward Value: ${total_value:.2f}\n")
+    
 def conversion():
     bitcoin = get_crypto_price("BTC")
     ethereum = get_crypto_price("ETH")
@@ -63,7 +64,7 @@ def conversion():
     recover = (10216.3)
     value = (((recover/ethereum)/0.04307645)*0.15)
     value2 = (((recover/solana)/0.051702936)*0.01)
-    x = ethereum/recover
+    x = recover/ethereum 
     y = recover/solana
     rounded_num = round(value, 2)
     rounded_num2 = round(value2, 2)
