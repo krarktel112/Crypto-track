@@ -95,7 +95,6 @@ def main():
             display_portfolio(portfolio, portfolio2)
             conversion()
             conversion2()
-            conversion3()
         except:
             print("Error, retrying.")
         time.sleep(30)
