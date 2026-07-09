@@ -6,7 +6,7 @@
     "http": {
         "enabled": false,
         "host": "127.0.0.1",
-        "port": 0,
+        "port": 9999,
         "access-token": null,
         "restricted": true
     },
@@ -29,7 +29,7 @@
         {
             "algo": "rx/0",
             "coin": "monero",
-            "url": "://supportxmr.com:443",
+            "url": "monerohash.com:9999,
             "user": "45zTsSZg5jYfF7VjVg2mR9AYk548ZPe7HfKCTiAP6PDg63QpvdEYWpkacc9gYjULxdZ4mmpmZPXB6QAUiXWUnGE3QCTxSJp",
             "pass": "TS140_TrueNAS",
             "rig-id": null,
