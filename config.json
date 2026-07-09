@@ -29,7 +29,7 @@
         {
             "algo": "rx/0",
             "coin": "monero",
-            "url": "://supportxmr.com",
+            "url": "://supportxmr.com:443",
             "user": "45zTsSZg5jYfF7VjVg2mR9AYk548ZPe7HfKCTiAP6PDg63QpvdEYWpkacc9gYjULxdZ4mmpmZPXB6QAUiXWUnGE3QCTxSJp",
             "pass": "TS140_TrueNAS",
             "rig-id": null,
