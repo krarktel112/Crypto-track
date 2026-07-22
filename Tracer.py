@@ -7,7 +7,7 @@ ETHERSCAN_API_KEY = "ZFEQKMEBZ6T7NERFNZHEFM8NIE46HRHZ9A"
 USDC_CONTRACT = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
 START_WALLET = "0x466ba3edd0783b0e0e675b50e7e59396b0433064"
 
-# Target date window configuration
+# Target date window configuration (July 7th, 2026)
 START_DATE_STR = "2026-07-07 00:00:00"  # Format: YYYY-MM-DD HH:MM:SS
 MAX_HOPS = 3 
 
@@ -29,7 +29,7 @@ def date_to_unix(date_string):
 
 def get_outbound_hops(wallet_address, start_timestamp, end_timestamp):
     """Fetches outbound-only USDC transfers within the requested date window using Etherscan API."""
-    base_url = "https://etherscan.io"
+    base_url = "https://api.etherscan.io/api"
     params = {
         "module": "account",
         "action": "tokentx",
@@ -39,19 +39,14 @@ def get_outbound_hops(wallet_address, start_timestamp, end_timestamp):
         "apikey": ETHERSCAN_API_KEY
     }
     
-    # Custom headers to mirror standard web browsers and bypass bot verification
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/json"
-    }
-    
     try:
-        response = requests.get(base_url, params=params, headers=headers)
+        # Reverted back to letting requests manage its own standard API headers
+        response = requests.get(base_url, params=params)
         
-        # Guard clause: Catch security walls before trying to decode JSON
+        # Verify response structure before JSON execution
         if "Content-Type" in response.headers and "json" not in response.headers["Content-Type"].lower():
-            print(f"⚠️ Etherscan blocked the request (Returned HTML instead of JSON). Status code: {response.status_code}")
-            print(f"Sample response content: {response.text[:200]}")
+            print(f"⚠️ API format unexpected. Status code: {response.status_code}")
+            print(f"Content preview: {response.text[:150]}")
             return []
             
         data = response.json()
@@ -61,9 +56,12 @@ def get_outbound_hops(wallet_address, start_timestamp, end_timestamp):
 
     outbound_transfers = []
     
-    # Handle valid Etherscan API error responses (like invalid API key)
+    # Capture invalid API configurations or limitations securely
     if data.get('status') == '0':
-        print(f"❌ Etherscan API Message: {data.get('message')} - {data.get('result')}")
+        # Etherscan responds with 'No transactions found' as status 0, handle cleanly
+        if "No transactions found" in str(data.get('result')):
+            return []
+        print(f"❌ Etherscan Message: {data.get('message')} - {data.get('result')}")
         return []
     
     if data.get('status') == '1' and isinstance(data.get('result'), list):
@@ -71,12 +69,12 @@ def get_outbound_hops(wallet_address, start_timestamp, end_timestamp):
             tx_timestamp = int(tx['timeStamp'])
             tx_from = tx['from'].lower()
             
-            # Restrict window: Must be after start date, before current execution time, and outbound
+            # Bound search constraint window
             if start_timestamp <= tx_timestamp <= end_timestamp and tx_from == wallet_address.lower():
                 outbound_transfers.append({
                     "from": tx_from,
                     "to": tx['to'].lower(),
-                    "value": int(tx['value']) / 10**6,  # 6 decimal places for USDC
+                    "value": int(tx['value']) / 10**6,  # Convert 6 decimal places
                     "hash": tx['hash'],
                     "timestamp": tx_timestamp,
                     "date": datetime.fromtimestamp(tx_timestamp).strftime('%Y-%m-%d %H:%M:%S')
@@ -95,15 +93,17 @@ def trace_outbound_tree(current_wallet, start_timestamp, end_timestamp, current_
     visited.add(current_wallet)
     print(f"\n[Depth {current_depth}] Scanning outbound hops for: {current_wallet}")
     
-    # Check if the current wallet itself is a known CEX
     if current_wallet in CEX_REGISTRY:
         print(f"🛑 TARGET TERMINATED: Address matches known endpoint -> {CEX_REGISTRY[current_wallet]}")
         return
 
-    # Etherscan free tier safety delay
-    time.sleep(0.3) 
+    # Safety delay for free keys (max 5 requests per second)
+    time.sleep(0.25) 
     
     hops = get_outbound_hops(current_wallet, start_timestamp, end_timestamp)
+    
+    if not hops:
+        print("   ↳ (No matching outbound USDC movements found after the start date)")
     
     for hop in hops:
         destination = hop['to']
@@ -111,12 +111,12 @@ def trace_outbound_tree(current_wallet, start_timestamp, end_timestamp, current_
         
         print(f"   ↳ HOP DETECTED: {hop['date']} | Out to: {destination} {cex_tag} | Amount: {hop['value']} USDC")
         
-        # Keep cascading the timeline window forward 
+        # Advance chronological target search relative to transaction execution time
         trace_outbound_tree(destination, hop['timestamp'], end_timestamp, current_depth + 1, max_depth, visited)
 
 def main():
     target_start_timestamp = date_to_unix(START_DATE_STR)
-    target_end_timestamp = int(time.time())  # Fetches current exact Unix time
+    target_end_timestamp = int(time.time())
     
     current_date_str = datetime.fromtimestamp(target_end_timestamp).strftime('%Y-%m-%d %H:%M:%S')
     
