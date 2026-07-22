@@ -28,9 +28,12 @@ def date_to_unix(date_string):
     return int(time.mktime(dt.timetuple()))
 
 def get_outbound_hops(wallet_address, start_timestamp, end_timestamp):
-    """Fetches outbound-only USDC transfers within the requested date window using Etherscan API."""
-    base_url = "https://api.etherscan.io/api"
+    """Fetches outbound-only USDC transfers within the requested date window using Etherscan API V2."""
+    # Migrated base URL path to official V2 endpoint
+    base_url = "https://etherscan.io"
+    
     params = {
+        "chainid": "1",  # REQUIRED for V2: Explicitly specifies Ethereum Mainnet
         "module": "account",
         "action": "tokentx",
         "contractaddress": USDC_CONTRACT,
@@ -40,13 +43,10 @@ def get_outbound_hops(wallet_address, start_timestamp, end_timestamp):
     }
     
     try:
-        # Reverted back to letting requests manage its own standard API headers
         response = requests.get(base_url, params=params)
         
-        # Verify response structure before JSON execution
         if "Content-Type" in response.headers and "json" not in response.headers["Content-Type"].lower():
             print(f"⚠️ API format unexpected. Status code: {response.status_code}")
-            print(f"Content preview: {response.text[:150]}")
             return []
             
         data = response.json()
@@ -56,12 +56,11 @@ def get_outbound_hops(wallet_address, start_timestamp, end_timestamp):
 
     outbound_transfers = []
     
-    # Capture invalid API configurations or limitations securely
+    # Capture invalid API configurations or data limitations securely
     if data.get('status') == '0':
-        # Etherscan responds with 'No transactions found' as status 0, handle cleanly
         if "No transactions found" in str(data.get('result')):
             return []
-        print(f"❌ Etherscan Message: {data.get('message')} - {data.get('result')}")
+        print(f"❌ Etherscan V2 Error: {data.get('message')} - {data.get('result')}")
         return []
     
     if data.get('status') == '1' and isinstance(data.get('result'), list):
@@ -74,7 +73,7 @@ def get_outbound_hops(wallet_address, start_timestamp, end_timestamp):
                 outbound_transfers.append({
                     "from": tx_from,
                     "to": tx['to'].lower(),
-                    "value": int(tx['value']) / 10**6,  # Convert 6 decimal places
+                    "value": int(tx['value']) / 10**6,  # Convert 6 decimal places for USDC
                     "hash": tx['hash'],
                     "timestamp": tx_timestamp,
                     "date": datetime.fromtimestamp(tx_timestamp).strftime('%Y-%m-%d %H:%M:%S')
@@ -102,7 +101,7 @@ def trace_outbound_tree(current_wallet, start_timestamp, end_timestamp, current_
     
     hops = get_outbound_hops(current_wallet, start_timestamp, end_timestamp)
     
-    if not hops:
+    if not hops and current_depth == 0:
         print("   ↳ (No matching outbound USDC movements found after the start date)")
     
     for hop in hops:
