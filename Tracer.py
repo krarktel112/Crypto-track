@@ -1,39 +1,113 @@
 import requests
-import time
+import json
+import asyncio
+import websockets
+from collections import deque
 
-MEMPOOL_API_BASE = "https://mempool.space/api"
+# Configuration
+ETHERSCAN_API_KEY = "YOUR_ETHERSCAN_API_KEY"
+BLOCKNATIVE_API_KEY = "YOUR_BLOCKNATIVE_API_KEY"
+USDC_CONTRACT_ADDRESS = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" # Ethereum Mainnet
+START_WALLET = "0xYourStartingWalletAddress"
+MAX_HOPS = 3 # Define how deep to trace the transaction tree
 
-def get_transaction(txid):
-    """Fetch details for a transaction by TxID."""
-    url = f"{MEMPOOL_API_BASE}/tx/{txid}"
+# Etherscan endpoint to fetch past transactions
+ETHERSCAN_URL = f"https://etherscan.io{USDC_CONTRACT_ADDRESS}&address={{address}}&sort=desc&apikey={ETHERSCAN_API_KEY}"
+
+def get_past_usdc_transfers(wallet_address):
+    """Fetches past USDC transactions for a given wallet using Etherscan."""
+    url = ETHERSCAN_URL.format(address=wallet_address)
     response = requests.get(url)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        print(f"[-] Error fetching transaction {txid}: {response.status_code}")
-        return None
+    data = response.json()
+    
+    transfers = []
+    if data['status'] == '1':
+        for tx in data['result']:
+            transfers.append({
+                "from": tx['from'].lower(),
+                "to": tx['to'].lower(),
+                "value": int(tx['value']) / 10**6, # USDC has 6 decimals
+                "hash": tx['hash']
+            })
+    return transfers
 
-def get_outspends(txid):
-    """Fetch spending status for all outputs of a transaction."""
-    url = f"{MEMPOOL_API_BASE}/tx/{txid}/outspends"
-    response = requests.get(url)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        print(f"[-] Error fetching outspends for {txid}: {response.status_code}")
-        return None
-
-def trace_funds(start_txid, max_hops=5):
-    """
-    Recursively traces funds starting from a given Bitcoin TxID up to max_hops.
-    """
-    print(f"=== Starting Fund Trace for TxID: {start_txid} ===\n")
-    queue = [(start_txid, 0)]  # (txid, current_hop_level)
-    visited_txids = set()
+def trace_wallet_hops(start_wallet, max_depth):
+    """Recursively traces funds hopped across multiple wallets."""
+    visited = set()
+    queue = deque([(start_wallet.lower(), 0)])
+    transaction_tree = []
 
     while queue:
-        current_txid, hop = queue.pop(0)
+        current_wallet, depth = queue.popleft()
+        
+        if depth >= max_depth:
+            continue
+            
+        if current_wallet not in visited:
+            visited.add(current_wallet)
+            print(f"Tracing history for wallet: {current_wallet} at depth {depth}")
+            
+            transfers = get_past_usdc_transfers(current_wallet)
+            
+            for tx in transfers:
+                tx['depth'] = depth
+                transaction_tree.append(tx)
+                
+                # If we haven't reached max hops, add the receiving wallet to queue to trace further
+                if tx['to'] not in visited:
+                    queue.append((tx['to'], depth + 1))
+                    
+    return transaction_tree
 
+async def monitor_mempool_realtime(wallet_address):
+    """Monitors the Blocknative WebSocket API to catch real-time USDC hops."""
+    uri = "wss://://blocknative.com"
+    
+    subscription_payload = {
+        "timeStamp": "...",
+        "dappId": BLOCKNATIVE_API_KEY,
+        "version": "1",
+        "blockchain": "ethereum",
+        "network": "mainnet",
+        "add": wallet_address.lower(),
+        "filters": [
+            {
+                "contract": USDC_CONTRACT_ADDRESS,
+                "event": "Transfer(address,address,uint256)"
+            }
+        ]
+    }
+
+    print(f"Listening for real-time USDC transactions for {wallet_address}...")
+    async with websockets.connect(uri) as websocket:
+        await websocket.send(json.dumps(subscription_payload))
+        
+        while True:
+            response = await websocket.recv()
+            event = json.loads(response)
+            
+            # Parse real-time transfer details
+            if "transaction" in event:
+                tx = event["transaction"]
+                print("\n[!] NEW HOP DETECTED IN MEMPOOL:")
+                print(f"From: {tx.get('from')}")
+                print(f"To: {tx.get('to')}")
+                print(f"Hash: {tx.get('hash')}")
+
+def main():
+    # 1. Trace past transaction hops
+    print("--- Tracing Past USDC Transactions ---")
+    history = trace_wallet_hops(START_WALLET, MAX_HOPS)
+    
+    print("\nTracing Complete. Found {len(history)} hops.")
+    for hop in history:
+        print(f"Depth {hop['depth']} | {hop['from']} -> {hop['to']} | {hop['value']} USDC")
+
+    # 2. Start real-time monitoring
+    asyncio.run(monitor_mempool_realtime(START_WALLET))
+
+if __name__ == "__main__":
+    main()
         if current_txid in visited_txids or hop > max_hops:
             continue
 
