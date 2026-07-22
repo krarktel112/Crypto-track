@@ -4,7 +4,6 @@ import time
 
 # Configuration
 ETHERSCAN_API_KEY = "ZFEQKMEBZ6T7NERFNZHEFM8NIE46HRHZ9A"
-USDC_CONTRACT = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
 START_WALLET = "0x466ba3edd0783b0e0e675b50e7e59396b0433064"
 
 # Target date window configuration
@@ -28,20 +27,18 @@ def date_to_unix(date_string):
     return int(time.mktime(dt.timetuple()))
 
 def get_outbound_hops(wallet_address, start_timestamp, end_timestamp):
-    """Fetches outbound-only USDC transfers within the requested date window using Etherscan API V2."""
-    base_url = "https://api.etherscan.io/v2/api"
+    """Fetches all outbound native ETH transactions within the requested date window using Etherscan API V2."""
+    base_url = "https://etherscan.io"
     
     params = {
-        "chainid": "1",  # Specifies Ethereum Mainnet for V2 routing
+        "chainid": "1",          # Specifies Ethereum Mainnet
         "module": "account",
-        "action": "tokentx",
-        "contractaddress": USDC_CONTRACT,
+        "action": "txlist",      # Changed from 'tokentx' to trace native ETH/money movements
         "address": wallet_address,
         "sort": "asc",
         "apikey": ETHERSCAN_API_KEY
     }
     
-    # Crucial Header Block: Satisfies Etherscan's V2 cloud routing engine constraints
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "Accept": "application/json"
@@ -50,10 +47,8 @@ def get_outbound_hops(wallet_address, start_timestamp, end_timestamp):
     try:
         response = requests.get(base_url, params=params, headers=headers)
         
-        # Verify formatting outputs securely before decoding
         if "Content-Type" in response.headers and "json" not in response.headers["Content-Type"].lower():
             print(f"⚠️ API format unexpected. Status code: {response.status_code}")
-            print(f"Content preview: {response.text[:150]}")
             return []
             
         data = response.json()
@@ -63,7 +58,6 @@ def get_outbound_hops(wallet_address, start_timestamp, end_timestamp):
 
     outbound_transfers = []
     
-    # Clean handling for empty wallets or exhausted data queues
     if data.get('status') == '0':
         if "No transactions found" in str(data.get('result')):
             return []
@@ -75,21 +69,26 @@ def get_outbound_hops(wallet_address, start_timestamp, end_timestamp):
             tx_timestamp = int(tx['timeStamp'])
             tx_from = tx['from'].lower()
             
-            # Filter constraint matching logic
+            # Condition 1: Must be after start date and before end date
+            # Condition 2: Must be outbound from the current wallet node
+            # Condition 3: Ensure value is greater than 0 to filter out smart contract interactions that didn't transfer money
             if start_timestamp <= tx_timestamp <= end_timestamp and tx_from == wallet_address.lower():
-                outbound_transfers.append({
-                    "from": tx_from,
-                    "to": tx['to'].lower(),
-                    "value": int(tx['value']) / 10**6,  # Standardized 6 decimals conversion
-                    "hash": tx['hash'],
-                    "timestamp": tx_timestamp,
-                    "date": datetime.fromtimestamp(tx_timestamp).strftime('%Y-%m-%d %H:%M:%S')
-                })
+                tx_value = int(tx['value']) / 10**18  # Native ETH has 18 decimal places
+                
+                if tx_value > 0:
+                    outbound_transfers.append({
+                        "from": tx_from,
+                        "to": tx['to'].lower(),
+                        "value": tx_value,
+                        "hash": tx['hash'],
+                        "timestamp": tx_timestamp,
+                        "date": datetime.fromtimestamp(tx_timestamp).strftime('%Y-%m-%d %H:%M:%S')
+                    })
                 
     return outbound_transfers
 
 def trace_outbound_tree(current_wallet, start_timestamp, end_timestamp, current_depth, max_depth, visited=None):
-    """Recursively traces cascading outbound transfers and flags CEX matches."""
+    """Recursively traces cascading outbound native transfers and flags CEX matches."""
     if visited is None:
         visited = set()
         
@@ -97,27 +96,27 @@ def trace_outbound_tree(current_wallet, start_timestamp, end_timestamp, current_
         return
         
     visited.add(current_wallet)
-    print(f"\n[Depth {current_depth}] Scanning outbound hops for: {current_wallet}")
+    print(f"\n[Depth {current_depth}] Scanning outbound native hops for: {current_wallet}")
     
     if current_wallet in CEX_REGISTRY:
         print(f"🛑 TARGET TERMINATED: Address matches known endpoint -> {CEX_REGISTRY[current_wallet]}")
         return
 
-    # Safety delay honoring free account tier constraints (3-5 calls maximum per second)
+    # Safety delay honoring free account tier constraints
     time.sleep(0.35) 
     
     hops = get_outbound_hops(current_wallet, start_timestamp, end_timestamp)
     
     if not hops and current_depth == 0:
-        print(f"   ↳ (No matching outbound USDC movements found between {START_DATE_STR} and today)")
+        print(f"   ↳ (No outbound native money movements found between {START_DATE_STR} and today)")
     
     for hop in hops:
         destination = hop['to']
         cex_tag = f"⚠️ [CEX DETECTED: {CEX_REGISTRY[destination]}]" if destination in CEX_REGISTRY else "[Private Wallet]"
         
-        print(f"   ↳ HOP DETECTED: {hop['date']} | Out to: {destination} {cex_tag} | Amount: {hop['value']} USDC")
+        print(f"   ↳ HOP DETECTED: {hop['date']} | Out to: {destination} {cex_tag} | Amount: {hop['value']:.5f} ETH")
         
-        # Chronological forward loop execution logic
+        # Advance timeline window forward so hops are evaluated chronologically
         trace_outbound_tree(destination, hop['timestamp'], end_timestamp, current_depth + 1, max_depth, visited)
 
 def main():
@@ -126,7 +125,7 @@ def main():
     
     current_date_str = datetime.fromtimestamp(target_end_timestamp).strftime('%Y-%m-%d %H:%M:%S')
     
-    print(f"Starting CEX-Aware Outbound Tracker from Origin: {START_WALLET}")
+    print(f"Starting CEX-Aware Native Outbound Tracker from Origin: {START_WALLET}")
     print(f"Tracking interval: {START_DATE_STR} to {current_date_str}\n")
     
     trace_outbound_tree(START_WALLET, target_start_timestamp, target_end_timestamp, current_depth=0, max_depth=MAX_HOPS)
