@@ -29,14 +29,19 @@ def date_to_unix(date_string):
 
 def get_outbound_hops(wallet_address, start_timestamp, end_timestamp):
     """Fetches outbound-only USDC transfers within the requested date window using Etherscan API."""
-    url = (
-        f"https://etherscan.io"
-        f"&contractaddress={USDC_CONTRACT}&address={wallet_address}"
-        f"&sort=asc&apikey={ETHERSCAN_API_KEY}"
-    )
+    # Fixed URL formatting breakdown to eliminate domain string fragmentation
+    base_url = "https://etherscan.io"
+    params = {
+        "module": "account",
+        "action": "tokentx",
+        "contractaddress": USDC_CONTRACT,
+        "address": wallet_address,
+        "sort": "asc",
+        "apikey": ETHERSCAN_API_KEY
+    }
     
     try:
-        response = requests.get(url)
+        response = requests.get(base_url, params=params)
         data = response.json()
     except Exception as e:
         print(f"Network error tracing {wallet_address}: {e}")
@@ -78,7 +83,7 @@ def trace_outbound_tree(current_wallet, start_timestamp, end_timestamp, current_
         print(f"🛑 TARGET TERMINATED: Address matches known endpoint -> {CEX_REGISTRY[current_wallet]}")
         return
 
-    # Etherscan free tier safety delay
+    # Etherscan free tier safety delay (Max 5 requests per second)
     time.sleep(0.25) 
     
     hops = get_outbound_hops(current_wallet, start_timestamp, end_timestamp)
@@ -94,7 +99,7 @@ def trace_outbound_tree(current_wallet, start_timestamp, end_timestamp, current_
 
 def main():
     target_start_timestamp = date_to_unix(START_DATE_STR)
-    target_end_timestamp = int(time.time())  # Automatically fetches exact current Unix time execution epoch
+    target_end_timestamp = int(time.time())  # Fetches current exact Unix time
     
     current_date_str = datetime.fromtimestamp(target_end_timestamp).strftime('%Y-%m-%d %H:%M:%S')
     
