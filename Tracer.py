@@ -5,10 +5,10 @@ import websockets
 from collections import deque
 
 # Configuration
-ETHERSCAN_API_KEY = "YOUR_ETHERSCAN_API_KEY"
+ETHERSCAN_API_KEY = "ZFEQKMEBZ6T7NERFNZHEFM8NIE46HRHZ9A"
 BLOCKNATIVE_API_KEY = "YOUR_BLOCKNATIVE_API_KEY"
 USDC_CONTRACT_ADDRESS = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" # Ethereum Mainnet
-START_WALLET = "0xYourStartingWalletAddress"
+START_WALLET = "0x466ba3edd0783b0e0e675b50e7e59396b0433064"
 MAX_HOPS = 3 # Define how deep to trace the transaction tree
 
 # Etherscan endpoint to fetch past transactions
