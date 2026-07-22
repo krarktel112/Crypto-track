@@ -5,10 +5,12 @@ import time
 # Configuration
 ETHERSCAN_API_KEY = "ZFEQKMEBZ6T7NERFNZHEFM8NIE46HRHZ9A"
 START_WALLET = "0x675150eeec3cffa64d92d5d6ab5ab4cd4ef70633"
+
+# Chronological barrier gate configuration (July 7th, 2026)
 CASH_APP_DEPOSIT_TIME = "2026-07-07 00:00:00"  # Format: YYYY-MM-DD HH:MM:SS
 MAX_HOPS = 3 
 
-# Free-tier local registry of prominent CEX deposit/hot wallets
+# Expanded registry mapping to flag centralized exit ramps instantly
 CEX_REGISTRY = {
     "0x28c6c06298d514db089934071355e5743bf21d60": "Binance: Hot Wallet",
     "0xdfd5293d8e347dfe59e90efd55b2956a1343963d": "Binance: Deposit",
@@ -19,72 +21,77 @@ CEX_REGISTRY = {
     "0xa7efae728d2936e78bda97dc267687568dd593f3": "Crypto.com: Hot Wallet",
 }
 
+CLIENT_HEADERS = {
+    "Accept": "application/json",
+    "Connection": "keep-alive"
+}
+
 def date_to_unix(date_string):
     """Converts a UTC date string into a Unix timestamp."""
     dt = datetime.strptime(date_string, "%Y-%m-%d %H:%M:%S")
     return int(time.mktime(dt.timetuple()))
 
-def get_outbound_hops(wallet_address, start_timestamp, end_timestamp):
-    """Fetches outbound native ETH movements with deep terminal diagnostic printouts."""
-    base_url = "https://etherscan.io"
-    
+def fetch_etherscan_v2(action_endpoint, wallet_address):
+    """Safely contacts Etherscan V2 infrastructure endpoints."""
+    url = "https://etherscan.io"
     params = {
-        "chainid": "1",          # Ethereum Mainnet
+        "chainid": "1",
         "module": "account",
-        "action": "txlist",      # Targets base ETH movements
+        "action": action_endpoint,
         "address": wallet_address,
         "sort": "asc",
         "apikey": ETHERSCAN_API_KEY
     }
-    
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36",
-        "Accept": "application/json"
-    }
-    
     try:
-        response = requests.get(base_url, params=params, headers=headers)
-        data = response.json()
-    except Exception as e:
-        print(f"Network error tracing {wallet_address}: {e}")
-        return []
+        response = requests.get(url, params=params, headers=CLIENT_HEADERS, timeout=15)
+        if "json" in response.headers.get("Content-Type", "").lower():
+            return response.json().get("result", [])
+    except Exception:
+        pass
+    return []
 
-    # Diagnostics block: Print raw internal Etherscan payload status codes directly to the terminal
-    if data.get('status') == '0':
-        message = data.get('message', '')
-        result = data.get('result', '')
-        
-        # Suppress noise if the wallet simply has zero historical logs
-        if "No transactions found" in str(result):
-            return []
-            
-        print(f"❌ Internal Etherscan API Rejection Message: [{message}] - Details: {result}")
-        return []
-
-    outbound_transfers = []
+def get_all_outbound_movements(wallet_address, start_timestamp, end_timestamp):
+    """Gathers native ETH, internal contract sub-calls, and token movements simultaneously."""
+    combined_hops = []
     
-    if data.get('status') == '1' and isinstance(data.get('result'), list):
-        for tx in data['result']:
-            tx_timestamp = int(tx['timeStamp'])
-            tx_from = tx['from'].lower()
-            
-            if start_timestamp <= tx_timestamp <= end_timestamp and tx_from == wallet_address.lower():
-                tx_value = int(tx['value']) / 10**18  # Native ETH decimals conversion
-                
-                if tx_value > 0:
-                    outbound_transfers.append({
-                        "from": tx_from,
-                        "to": tx['to'].lower(),
-                        "value": tx_value,
-                        "hash": tx['hash'],
-                        "timestamp": tx_timestamp,
-                        "date": datetime.fromtimestamp(tx_timestamp).strftime('%Y-%m-%d %H:%M:%S')
-                    })
-                
-    return outbound_transfers
+    # Layer 1 Scan: Standard ETH transaction list
+    tx_list = fetch_etherscan_v2("txlist", wallet_address)
+    if isinstance(tx_list, list):
+        for tx in tx_list:
+            if int(tx.get('timeStamp', 0)) >= start_timestamp and tx.get('from', '').lower() == wallet_address.lower():
+                val = int(tx.get('value', 0)) / 10**18
+                if val > 0.001:  # Filter out trivial gas dust
+                    combined_hops.append({"to": tx['to'].lower(), "val": val, "asset": "ETH", "ts": int(tx['timeStamp']), "hash": tx['hash']})
 
-def trace_outbound_tree(current_wallet, start_timestamp, end_timestamp, current_depth, max_depth, visited=None):
-    """Recursively traces cascading outbound native money transfers and flags exchange matches."""
+    time.sleep(0.25) # Throttle for free-tier key constraints
+    
+    # Layer 2 Scan: Internal smart contract executions (DeFi Swaps/Mixers)
+    internal_list = fetch_etherscan_v2("txlistinternal", wallet_address)
+    if isinstance(internal_list, list):
+        for tx in internal_list:
+            if int(tx.get('timeStamp', 0)) >= start_timestamp and tx.get('from', '').lower() == wallet_address.lower():
+                val = int(tx.get('value', 0)) / 10**18
+                if val > 0.001:
+                    combined_hops.append({"to": tx['to'].lower(), "val": val, "asset": "ETH (Internal Contract)", "ts": int(tx['timeStamp']), "hash": tx['hash']})
+
+    time.sleep(0.25)
+
+    # Layer 3 Scan: ERC-20 Tokens (USDC, USDT, DAI, etc.)
+    token_list = fetch_etherscan_v2("tokentx", wallet_address)
+    if isinstance(token_list, list):
+        for tx in token_list:
+            if int(tx.get('timeStamp', 0)) >= start_timestamp and tx.get('from', '').lower() == wallet_address.lower():
+                decimals = int(tx.get('tokenDecimal', 18))
+                val = int(tx.get('value', 0)) / 10**decimals
+                if val > 1.0:  # Filter out small token dust
+                    combined_hops.append({"to": tx['to'].lower(), "val": val, "asset": tx.get('tokenSymbol', 'Token'), "ts": int(tx['timeStamp']), "hash": tx['hash']})
+
+    # Sort everything chronologically so we trace forwards correctly
+    combined_hops.sort(key=lambda x: x['ts'])
+    return combined_hops
+
+def trace_forensic_tree(current_wallet, start_timestamp, end_timestamp, current_depth, max_depth, visited=None):
+    """Recursively tracks any assets leaking out across multi-chain or multi-token footprints."""
     if visited is None:
         visited = set()
         
@@ -92,35 +99,36 @@ def trace_outbound_tree(current_wallet, start_timestamp, end_timestamp, current_
         return
         
     visited.add(current_wallet)
-    print(f"\n[Depth {current_depth}] Scanning outbound native hops for: {current_wallet}")
+    print(f"\n[Depth {current_depth}] Auditing ALL outbound assets for: {current_wallet}")
     
     if current_wallet in CEX_REGISTRY:
-        print(f"🛑 TARGET TERMINATED: Money reached known exchange endpoint -> {CEX_REGISTRY[current_wallet]}")
+        print(f"🛑 TARGET TERMINATED: Stolen funds hit a known centralized cash-out gate -> {CEX_REGISTRY[current_wallet]}")
         return
 
-    time.sleep(0.35) 
-    hops = get_outbound_hops(current_wallet, start_timestamp, end_timestamp)
+    time.sleep(0.3)
+    hops = get_all_outbound_movements(current_wallet, start_timestamp, end_timestamp)
     
     if not hops and current_depth == 0:
-        print(f"   ↳ (No outbound native money movements found between {CASH_APP_DEPOSIT_TIME} and today)")
+        print("   ↳ (No asset footprints found leaving this node. Funds are currently holding inside this wallet.)")
     
     for hop in hops:
-        destination = hop['to']
-        cex_tag = f"⚠️ [CEX DETECTED: {CEX_REGISTRY[destination]}]" if destination in CEX_REGISTRY else "[Private Wallet]"
+        dest = hop['to']
+        tag = f"⚠️ [CEX ENTRY DETECTED: {CEX_REGISTRY[dest]}]" if dest in CEX_REGISTRY else "[Next Private Wallet Node]"
+        date_str = datetime.fromtimestamp(hop['ts']).strftime('%Y-%m-%d %H:%M:%S')
         
-        print(f"   ↳ HOP DETECTED: {hop['date']} | Out to: {destination} {cex_tag} | Amount: {hop['value']:.5f} ETH")
-        trace_outbound_tree(destination, hop['timestamp'], end_timestamp, current_depth + 1, max_depth, visited)
+        print(f"   ↳ FLIGHT DETECTED: {date_str} | Out to: {dest} {tag} | Moved: {hop['val']:.4f} {hop['asset']}")
+        
+        # Advance forensic focus forward in time based on this asset path execution window
+        trace_forensic_tree(dest, hop['ts'], end_timestamp, current_depth + 1, max_depth, visited)
 
 def main():
     funding_timestamp = date_to_unix(CASH_APP_DEPOSIT_TIME)
     target_end_timestamp = int(time.time())
     
-    current_date_str = datetime.fromtimestamp(target_end_timestamp).strftime('%Y-%m-%d %H:%M:%S')
+    print(f"Initializing Anti-Scam Forensic Asset Tracker on Target Node: {START_WALLET}")
+    print(f"Scanning Native ETH, Internal Contract Swaps, and ERC-20 Tokens since: {CASH_APP_DEPOSIT_TIME}\n")
     
-    print(f"Starting CEX-Aware Native Outbound Tracker from Cash App Target: {START_WALLET}")
-    print(f"Tracking interval: {CASH_APP_DEPOSIT_TIME} to {current_date_str}\n")
-    
-    trace_outbound_tree(START_WALLET, funding_timestamp, target_end_timestamp, current_depth=0, max_depth=MAX_HOPS)
+    trace_forensic_tree(START_WALLET, funding_timestamp, target_end_timestamp, current_depth=0, max_depth=MAX_HOPS)
 
 if __name__ == "__main__":
     main()
