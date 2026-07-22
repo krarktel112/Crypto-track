@@ -4,11 +4,7 @@ import time
 
 # Configuration
 ETHERSCAN_API_KEY = "ZFEQKMEBZ6T7NERFNZHEFM8NIE46HRHZ9A"
-
-# Your specific Cash App funding recipient address
 START_WALLET = "0x675150eeec3cffa64d92d5d6ab5ab4cd4ef70633"
-
-# Chronological barrier gate configuration
 CASH_APP_DEPOSIT_TIME = "2026-07-07 00:00:00"  # Format: YYYY-MM-DD HH:MM:SS
 MAX_HOPS = 3 
 
@@ -29,53 +25,52 @@ def date_to_unix(date_string):
     return int(time.mktime(dt.timetuple()))
 
 def get_outbound_hops(wallet_address, start_timestamp, end_timestamp):
-    """Fetches all outbound native ETH transactions within the requested date window using Etherscan API V2."""
+    """Fetches outbound native ETH movements with deep terminal diagnostic printouts."""
     base_url = "https://etherscan.io"
     
     params = {
         "chainid": "1",          # Ethereum Mainnet
         "module": "account",
-        "action": "txlist",      # Traces native ETH money movements instead of token contracts
+        "action": "txlist",      # Targets base ETH movements
         "address": wallet_address,
         "sort": "asc",
         "apikey": ETHERSCAN_API_KEY
     }
     
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36",
         "Accept": "application/json"
     }
     
     try:
         response = requests.get(base_url, params=params, headers=headers)
-        
-        if "Content-Type" in response.headers and "json" not in response.headers["Content-Type"].lower():
-            print(f"⚠️ API format unexpected. Status code: {response.status_code}")
-            return []
-            
         data = response.json()
     except Exception as e:
         print(f"Network error tracing {wallet_address}: {e}")
         return []
 
-    outbound_transfers = []
-    
+    # Diagnostics block: Print raw internal Etherscan payload status codes directly to the terminal
     if data.get('status') == '0':
-        if "No transactions found" in str(data.get('result')):
+        message = data.get('message', '')
+        result = data.get('result', '')
+        
+        # Suppress noise if the wallet simply has zero historical logs
+        if "No transactions found" in str(result):
             return []
-        print(f"❌ Etherscan V2 Error: {data.get('message')} - {data.get('result')}")
+            
+        print(f"❌ Internal Etherscan API Rejection Message: [{message}] - Details: {result}")
         return []
+
+    outbound_transfers = []
     
     if data.get('status') == '1' and isinstance(data.get('result'), list):
         for tx in data['result']:
             tx_timestamp = int(tx['timeStamp'])
             tx_from = tx['from'].lower()
             
-            # Filter condition: Check time bounds and ensure request is strictly outbound from this address node
             if start_timestamp <= tx_timestamp <= end_timestamp and tx_from == wallet_address.lower():
-                tx_value = int(tx['value']) / 10**18  # Native Ethereum standard has 18 decimal positions
+                tx_value = int(tx['value']) / 10**18  # Native ETH decimals conversion
                 
-                # Filter out raw execution calls, zero transfers, or permission configurations
                 if tx_value > 0:
                     outbound_transfers.append({
                         "from": tx_from,
@@ -103,9 +98,7 @@ def trace_outbound_tree(current_wallet, start_timestamp, end_timestamp, current_
         print(f"🛑 TARGET TERMINATED: Money reached known exchange endpoint -> {CEX_REGISTRY[current_wallet]}")
         return
 
-    # Free key safety rate throttle (3-5 requests max per second execution)
     time.sleep(0.35) 
-    
     hops = get_outbound_hops(current_wallet, start_timestamp, end_timestamp)
     
     if not hops and current_depth == 0:
@@ -116,8 +109,6 @@ def trace_outbound_tree(current_wallet, start_timestamp, end_timestamp, current_
         cex_tag = f"⚠️ [CEX DETECTED: {CEX_REGISTRY[destination]}]" if destination in CEX_REGISTRY else "[Private Wallet]"
         
         print(f"   ↳ HOP DETECTED: {hop['date']} | Out to: {destination} {cex_tag} | Amount: {hop['value']:.5f} ETH")
-        
-        # Keep cascading the timeline window forward 
         trace_outbound_tree(destination, hop['timestamp'], end_timestamp, current_depth + 1, max_depth, visited)
 
 def main():
