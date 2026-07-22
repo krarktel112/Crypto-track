@@ -29,7 +29,6 @@ def date_to_unix(date_string):
 
 def get_outbound_hops(wallet_address, start_timestamp, end_timestamp):
     """Fetches outbound-only USDC transfers within the requested date window using Etherscan API."""
-    # Fixed URL formatting breakdown to eliminate domain string fragmentation
     base_url = "https://etherscan.io"
     params = {
         "module": "account",
@@ -40,14 +39,32 @@ def get_outbound_hops(wallet_address, start_timestamp, end_timestamp):
         "apikey": ETHERSCAN_API_KEY
     }
     
+    # Custom headers to mirror standard web browsers and bypass bot verification
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json"
+    }
+    
     try:
-        response = requests.get(base_url, params=params)
+        response = requests.get(base_url, params=params, headers=headers)
+        
+        # Guard clause: Catch security walls before trying to decode JSON
+        if "Content-Type" in response.headers and "json" not in response.headers["Content-Type"].lower():
+            print(f"⚠️ Etherscan blocked the request (Returned HTML instead of JSON). Status code: {response.status_code}")
+            print(f"Sample response content: {response.text[:200]}")
+            return []
+            
         data = response.json()
     except Exception as e:
         print(f"Network error tracing {wallet_address}: {e}")
         return []
 
     outbound_transfers = []
+    
+    # Handle valid Etherscan API error responses (like invalid API key)
+    if data.get('status') == '0':
+        print(f"❌ Etherscan API Message: {data.get('message')} - {data.get('result')}")
+        return []
     
     if data.get('status') == '1' and isinstance(data.get('result'), list):
         for tx in data['result']:
@@ -83,8 +100,8 @@ def trace_outbound_tree(current_wallet, start_timestamp, end_timestamp, current_
         print(f"🛑 TARGET TERMINATED: Address matches known endpoint -> {CEX_REGISTRY[current_wallet]}")
         return
 
-    # Etherscan free tier safety delay (Max 5 requests per second)
-    time.sleep(0.25) 
+    # Etherscan free tier safety delay
+    time.sleep(0.3) 
     
     hops = get_outbound_hops(current_wallet, start_timestamp, end_timestamp)
     
