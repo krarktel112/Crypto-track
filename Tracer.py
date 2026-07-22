@@ -4,12 +4,11 @@ import time
 
 # Configuration
 ETHERSCAN_API_KEY = "ZFEQKMEBZ6T7NERFNZHEFM8NIE46HRHZ9A"
-USDC_CONTRACT = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
 
-# Updated recipient address that received the funds from Cash App
+# Your specific Cash App funding recipient address
 START_WALLET = "0x675150eeec3cffa64d92d5d6ab5ab4cd4ef70633"
 
-# Set this to the approximate date and time Cash App sent the deposit
+# Chronological barrier gate configuration
 CASH_APP_DEPOSIT_TIME = "2026-07-07 00:00:00"  # Format: YYYY-MM-DD HH:MM:SS
 MAX_HOPS = 3 
 
@@ -30,14 +29,13 @@ def date_to_unix(date_string):
     return int(time.mktime(dt.timetuple()))
 
 def get_outbound_hops(wallet_address, start_timestamp, end_timestamp):
-    """Fetches outbound-only USDC transfers after the Cash App funding time using Etherscan API V2."""
+    """Fetches all outbound native ETH transactions within the requested date window using Etherscan API V2."""
     base_url = "https://etherscan.io"
     
     params = {
-        "chainid": "1",  # Ethereum Mainnet
+        "chainid": "1",          # Ethereum Mainnet
         "module": "account",
-        "action": "tokentx",
-        "contractaddress": USDC_CONTRACT,
+        "action": "txlist",      # Traces native ETH money movements instead of token contracts
         "address": wallet_address,
         "sort": "asc",
         "apikey": ETHERSCAN_API_KEY
@@ -73,21 +71,25 @@ def get_outbound_hops(wallet_address, start_timestamp, end_timestamp):
             tx_timestamp = int(tx['timeStamp'])
             tx_from = tx['from'].lower()
             
-            # Enforce gate: Must be after Cash App deposit time and strictly outbound
+            # Filter condition: Check time bounds and ensure request is strictly outbound from this address node
             if start_timestamp <= tx_timestamp <= end_timestamp and tx_from == wallet_address.lower():
-                outbound_transfers.append({
-                    "from": tx_from,
-                    "to": tx['to'].lower(),
-                    "value": int(tx['value']) / 10**6,  # 6 decimal places for USDC
-                    "hash": tx['hash'],
-                    "timestamp": tx_timestamp,
-                    "date": datetime.fromtimestamp(tx_timestamp).strftime('%Y-%m-%d %H:%M:%S')
-                })
+                tx_value = int(tx['value']) / 10**18  # Native Ethereum standard has 18 decimal positions
+                
+                # Filter out raw execution calls, zero transfers, or permission configurations
+                if tx_value > 0:
+                    outbound_transfers.append({
+                        "from": tx_from,
+                        "to": tx['to'].lower(),
+                        "value": tx_value,
+                        "hash": tx['hash'],
+                        "timestamp": tx_timestamp,
+                        "date": datetime.fromtimestamp(tx_timestamp).strftime('%Y-%m-%d %H:%M:%S')
+                    })
                 
     return outbound_transfers
 
 def trace_outbound_tree(current_wallet, start_timestamp, end_timestamp, current_depth, max_depth, visited=None):
-    """Recursively traces cascading outbound transfers forward in time from the funding event."""
+    """Recursively traces cascading outbound native money transfers and flags exchange matches."""
     if visited is None:
         visited = set()
         
@@ -95,24 +97,25 @@ def trace_outbound_tree(current_wallet, start_timestamp, end_timestamp, current_
         return
         
     visited.add(current_wallet)
-    print(f"\n[Depth {current_depth}] Tracing outbound movements for wallet: {current_wallet}")
+    print(f"\n[Depth {current_depth}] Scanning outbound native hops for: {current_wallet}")
     
     if current_wallet in CEX_REGISTRY:
-        print(f"🛑 TARGET TERMINATED: Funds reached a known exchange -> {CEX_REGISTRY[current_wallet]}")
+        print(f"🛑 TARGET TERMINATED: Money reached known exchange endpoint -> {CEX_REGISTRY[current_wallet]}")
         return
 
-    time.sleep(0.35)  # Safety delay for free key tiers
+    # Free key safety rate throttle (3-5 requests max per second execution)
+    time.sleep(0.35) 
     
     hops = get_outbound_hops(current_wallet, start_timestamp, end_timestamp)
     
     if not hops and current_depth == 0:
-        print(f"   ↳ (No outbound USDC movements found after the Cash App funding timestamp)")
+        print(f"   ↳ (No outbound native money movements found between {CASH_APP_DEPOSIT_TIME} and today)")
     
     for hop in hops:
         destination = hop['to']
         cex_tag = f"⚠️ [CEX DETECTED: {CEX_REGISTRY[destination]}]" if destination in CEX_REGISTRY else "[Private Wallet]"
         
-        print(f"   ↳ HOP DETECTED: {hop['date']} | Out to: {destination} {cex_tag} | Amount: {hop['value']} USDC")
+        print(f"   ↳ HOP DETECTED: {hop['date']} | Out to: {destination} {cex_tag} | Amount: {hop['value']:.5f} ETH")
         
         # Keep cascading the timeline window forward 
         trace_outbound_tree(destination, hop['timestamp'], end_timestamp, current_depth + 1, max_depth, visited)
@@ -120,10 +123,11 @@ def trace_outbound_tree(current_wallet, start_timestamp, end_timestamp, current_
 def main():
     funding_timestamp = date_to_unix(CASH_APP_DEPOSIT_TIME)
     target_end_timestamp = int(time.time())
+    
     current_date_str = datetime.fromtimestamp(target_end_timestamp).strftime('%Y-%m-%d %H:%M:%S')
     
-    print(f"Starting Outbound Tracker on Cash App Funded Destination: {START_WALLET}")
-    print(f"Analyzing all movements from funding time ({CASH_APP_DEPOSIT_TIME}) up to today ({current_date_str})\n")
+    print(f"Starting CEX-Aware Native Outbound Tracker from Cash App Target: {START_WALLET}")
+    print(f"Tracking interval: {CASH_APP_DEPOSIT_TIME} to {current_date_str}\n")
     
     trace_outbound_tree(START_WALLET, funding_timestamp, target_end_timestamp, current_depth=0, max_depth=MAX_HOPS)
 
