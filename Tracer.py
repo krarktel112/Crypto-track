@@ -1,6 +1,7 @@
 import requests
 import time
 import sys
+import json
 from datetime import datetime
 
 # USER PARAMETERS
@@ -14,11 +15,11 @@ START_WALLETS = [
 ]
 CONSOLIDATION_HUB = "0x220fe14412bca438b3dbc5078e04f802f8f098e7"
 
-# ETHERSCAN V2 CORRECTED ENDPOINTS
+# ETHERSCAN V2 SETTINGS
 BASE_URL = "https://etherscan.io"
 CHAIN_ID = "1"  # Ethereum Mainnet
 
-# RECOGNIZED EXCHANGE & INTERACTION PLATFORMS
+# BROAD LABEL DATABASE
 KNOWN_ENTITIES = {
     "0x28c6c06298d514db089934071355e5743bf21d60": ("CEX Wallet", "Binance: Hot Wallet"),
     "0xdfd5293d8e347dfe59e90efd55b2956a1343963d": ("CEX Wallet", "Binance: Deposit Hub"),
@@ -35,12 +36,14 @@ def make_v2_request(params, max_retries=3):
     params["chainid"] = CHAIN_ID
     
     for attempt in range(max_retries):
-        time.sleep(1.2)  # Strict delay to protect free API limits
+        time.sleep(1.2)  # Strict 1.2s delay to fully respect free tier 5 req/sec limit
         try:
             response = requests.get(BASE_URL, params=params, timeout=15)
-            if response.status_code in:
+            if response.status_code == 429 or response.status_code == 403:
                 time.sleep(5)
                 continue
+            
+            # Safe JSON structural analysis
             try:
                 data = response.json()
                 if isinstance(data, dict):
@@ -64,7 +67,7 @@ def inspect_address_type(address):
     if code and code != "0x" and isinstance(code, str):
         source_res = make_v2_request({"module": "contract", "action": "getsourcecode", "address": address})
         source = source_res.get("result", [])
-        if source and isinstance(source, list) and len(source) > 0 and "ContractName" in source[0]:
+        if source and isinstance(source, list) and "ContractName" in source[0]:
             return "DEX Protocol / Contract", source[0]["ContractName"]
         return "Smart Contract", "Unverified Custom Contract (Potential Mixer/Bridge)"
         
@@ -91,8 +94,7 @@ def get_outflows(wallet_address):
     # 2. Native ETH Outflows
     res = make_v2_request({
         "module": "account", "action": "txlist",
-        "address": wallet_address, "startblock": START_BLOCK,
-        "endblock": "99999999", "sort": "asc"
+        "address": wallet_address, "startblock": START_BLOCK, "endblock": "99999999", "sort": "asc"
     })
     for tx in res.get("result", []) if isinstance(res.get("result"), list) else []:
         if tx['from'].lower() == wallet_address.lower() and int(tx.get('value', 0)) > 0:
@@ -121,7 +123,6 @@ def get_outflows(wallet_address):
 def run_forensic_audit():
     """Builds the complete text file trail map report."""
     log_filename = "forensic_trail_log.txt"
-    print("[*] Launching multi-hop trail audit...")
     
     with open(log_filename, "w", encoding="utf-8") as f:
         f.write("="*80 + "\n")
@@ -129,6 +130,7 @@ def run_forensic_audit():
         f.write(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write("="*80 + "\n\n")
         
+        # Step 1: Trace Initial Funnel Wallets
         f.write("[STAGE 1: INITIAL OUTFLOW ANALYSIS]\n")
         for wallet in START_WALLETS:
             f.write(f"\nOrigin Funnel Wallet: {wallet}\n")
@@ -141,6 +143,7 @@ def run_forensic_audit():
                 f.write(f"    Classification: {w_type} | Company Linked: {company}\n")
                 f.write(f"    Tx Hash: {tx['hash']}\n")
         
+        # Step 2: Analyze Convergence Hub
         f.write("\n\n" + "="*80 + "\n")
         f.write("[STAGE 2: CONSOLIDATION HUB ANALYSIS]\n")
         f.write(f"Target Wallet Hub Address: {CONSOLIDATION_HUB}\n")
@@ -160,7 +163,7 @@ def run_forensic_audit():
                 f.write(f"    Destination Type: {w_type} | Company Linked: {company}\n")
                 f.write(f"    Tx Hash: {tx['hash']}\n")
                 
-    print(f"✅ Success! Trail report written to: '{log_filename}'")
+    print(f"✅ Success! Comprehensive trail report generated and saved to: '{log_filename}'")
 
 def run_live_monitor():
     """Launches the clean, single-row console loop tracker for the final endpoint."""
@@ -168,15 +171,17 @@ def run_live_monitor():
     print(f"LAUNCHING LIVE SENTRY MONITOR FOR CURRENT ENDPOINT")
     print("="*80)
     
+    # Resolve initial profile parameters once to avoid repeating layout noise
     wallet_type, company_name = inspect_address_type(CONSOLIDATION_HUB)
     
     print(f"● WALLET TARGET : {CONSOLIDATION_HUB}")
     print(f"● TYPE CLASS    : {wallet_type}")
     print(f"● COMPANY LINK  : {company_name}")
     print("="*80)
-    print("[*] Monitoring background engine. Checking for changes every 15s...")
-    print("    [Keep window open. Press Ctrl+C to stop monitor securely]\n")
+    print("[*] Instantiating background engine. Watching for new outflows every 15s...")
+    print("    [Keep this terminal open. Press Ctrl+C to stop monitor securely]\n")
     
+    # Establish historic transaction benchmark
     baseline_txs = set()
     initial_flows = get_outflows(CONSOLIDATION_HUB)
     for tx in initial_flows:
@@ -184,6 +189,7 @@ def run_live_monitor():
         
     while True:
         try:
+            # Check balance
             res = make_v2_request({
                 "module": "account", "action": "tokenbalance",
                 "contractaddress": USDC_CONTRACT, "address": CONSOLIDATION_HUB, "tag": "latest"
@@ -191,6 +197,7 @@ def run_live_monitor():
             raw_val = res.get("result", "0")
             current_usdc = float(raw_val) / 10**6 if raw_val and not isinstance(raw_val, list) else 0.0
             
+            # Check loop transaction updates
             loop_flows = get_outflows(CONSOLIDATION_HUB)
             current_hashes = {tx['hash'] for tx in loop_flows}
             
@@ -202,7 +209,7 @@ def run_live_monitor():
                 print(f"New Outbound Tx Signatures Found: {list(new_txs)}")
                 print("🚨" * 20 + "\n")
                 
-                sys.stdout.write('\a')
+                sys.stdout.write('\a') # Terminal bell alert audio ping
                 sys.stdout.flush()
                 baseline_txs = current_hashes
             else:
@@ -213,9 +220,7 @@ def run_live_monitor():
         except KeyboardInterrupt:
             print("\n\n[-] Sentry tracking stopped safely. Exiting framework.")
             break
-        except Exception:
-            time.sleep(5)
-
-if __name__ == "__main__":
+except Exception:time.sleep(5)
+if name == "main":
     run_forensic_audit()
     run_live_monitor()
