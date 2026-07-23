@@ -72,4 +72,4 @@ def trace_wallet(wallet_address, depth=1, max_depth=3):
 # Target pooling wallet discovered via MetaSleuth
 pooling_wallet = "0x220fe14412bca438b3dbc5078e04f802f8f098e7"
 print("Starting secure trace on pooling wallet...")
-trace_wallet(pooling_wallet, depth=1, max_depth=3)
+trace_wallet(pooling_wallet, depth=1, max_depth=300)
