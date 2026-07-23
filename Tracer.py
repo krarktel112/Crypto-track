@@ -220,7 +220,10 @@ def run_live_monitor():
         except KeyboardInterrupt:
             print("\n\n[-] Sentry tracking stopped safely. Exiting framework.")
             break
-except Exception:time.sleep(5)
-if name == "main":
+        except Exception:
+            time.sleep(5)
+
+
+if __name__ == "__main__":
     run_forensic_audit()
     run_live_monitor()
