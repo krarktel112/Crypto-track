@@ -7,29 +7,53 @@ API_KEY = "ZFEQKMEBZ6T7NERFNZHEFM8NIE46HRHZ9A"
 CONSOLIDATION_WALLET = "0x220fe14412bca438b3dbc5078e04f802f8f098e7"
 USDC_CONTRACT = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
 
-# Target block approximate for mid-July 2026 to ignore older background noise
+# Target block approximate for mid-July 2026 onwards
 START_BLOCK = "20315000" 
-BASE_URL = "https://etherscan.io"
+BASE_URL = "https://api.etherscan.io/api"
 
-def make_request(params):
-    """Executes safe API calls against Etherscan."""
-    time.sleep(0.25)
+def make_safe_request(params, max_retries=3):
+    """Executes safe API calls with explicit rate limiting and JSON safety nets."""
     params["apikey"] = API_KEY
-    try:
-        response = requests.get(BASE_URL, params=params)
-        data = response.json()
-        if data.get("status") == "1":
-            return data.get("result", [])
-    except Exception as e:
-        print(f"    ⚠️ Etherscan API Error: {e}")
+    
+    for attempt in range(max_retries):
+        time.sleep(1.0)  # Increased delay to 1 full second to completely bypass the 5 req/sec limit
+        try:
+            response = requests.get(BASE_URL, params=params, timeout=10)
+            
+            # Catch standard HTTP errors (like 403 Forbidden or 429 Too Many Requests)
+            if response.status_code != 200:
+                print(f"    ⚠️ HTTP Error Status: {response.status_code}. Retrying...")
+                continue
+                
+            # Verify if content is actually JSON before decoding
+            try:
+                data = response.json()
+                if data.get("status") == "1":
+                    return data.get("result", [])
+                elif data.get("message") == "NOTOK":
+                    print(f"    ⚠️ Etherscan Message: {data.get('result')}")
+                    return []
+                else:
+                    return []
+            except ValueError:
+                print(f"    ⚠️ Received non-JSON response from server (Attempt {attempt+1}/{max_retries}).")
+                if "cloudflare" in response.text.lower():
+                    print("    🛑 Cloudflare Block: Etherscan is throttling your IP address. Waiting 5 seconds...")
+                    time.sleep(5)
+                continue
+                
+        except requests.exceptions.RequestException as e:
+            print(f"    ⚠️ Connection error: {e}. Retrying...")
+            time.sleep(2)
+            
     return []
 
 def get_pivot_outflows(wallet_address):
-    """Gathers all outbound activities from the consolidation wallet."""
+    """Gathers all outbound activities safely from the consolidation wallet."""
     outflows = []
 
-    # 1. Check Outbound USDC
-    usdc_txs = make_request({
+    print("[*] Checking Outbound USDC Transmissions...")
+    usdc_txs = make_safe_request({
         "module": "account", "action": "tokentx",
         "contractaddress": USDC_CONTRACT, "address": wallet_address,
         "startblock": START_BLOCK, "endblock": "99999999", "sort": "asc"
@@ -37,15 +61,13 @@ def get_pivot_outflows(wallet_address):
     for tx in usdc_txs:
         if tx['from'].lower() == wallet_address.lower():
             outflows.append({
-                "type": "USDC Token",
-                "to": tx['to'],
+                "type": "USDC Token", "to": tx['to'],
                 "amount": f"{int(tx['value']) / 10**6:,.2f} USDC",
-                "hash": tx['hash'],
-                "time": tx['timeStamp']
+                "hash": tx['hash'], "time": tx['timeStamp']
             })
 
-    # 2. Check Outbound ETH
-    eth_txs = make_request({
+    print("[*] Checking Outbound Standard ETH Transmissions...")
+    eth_txs = make_safe_request({
         "module": "account", "action": "txlist",
         "address": wallet_address, "startblock": START_BLOCK,
         "endblock": "99999999", "sort": "asc"
@@ -53,15 +75,13 @@ def get_pivot_outflows(wallet_address):
     for tx in eth_txs:
         if tx['from'].lower() == wallet_address.lower() and int(tx['value']) > 0:
             outflows.append({
-                "type": "Standard ETH",
-                "to": tx['to'],
+                "type": "Standard ETH", "to": tx['to'],
                 "amount": f"{int(tx['value']) / 10**18:.4f} ETH",
-                "hash": tx['hash'],
-                "time": tx['timeStamp']
+                "hash": tx['hash'], "time": tx['timeStamp']
             })
 
-    # 3. Check Internal Contract Outflows (DeFi Swaps/Bridges)
-    internal_txs = make_request({
+    print("[*] Checking Internal Smart Contract Executions...")
+    internal_txs = make_safe_request({
         "module": "account", "action": "txlistinternal",
         "address": wallet_address, "startblock": START_BLOCK,
         "endblock": "99999999", "sort": "asc"
@@ -69,24 +89,19 @@ def get_pivot_outflows(wallet_address):
     for tx in internal_txs:
         if tx['from'].lower() == wallet_address.lower() and int(tx['value']) > 0:
             outflows.append({
-                "type": "INTERNAL Swap/Execution",
-                "to": tx['to'],
+                "type": "INTERNAL Swap/Execution", "to": tx['to'],
                 "amount": f"{int(tx['value']) / 10**18:.4f} ETH equivalent",
-                "hash": tx['hash'],
-                "time": tx['timeStamp']
+                "hash": tx['hash'], "time": tx['timeStamp']
             })
 
     outflows.sort(key=lambda x: int(x['time']))
     return outflows
 
 def check_destination_info(address):
-    """Checks if the destination address is a known smart contract or exchange footprint."""
-    code = make_request({"module": "proxy", "action": "eth_getCode", "address": address, "tag": "latest"})
+    """Checks if destination is a smart contract protocol or private wallet."""
+    code = make_safe_request({"module": "proxy", "action": "eth_getCode", "address": address, "tag": "latest"})
     if code and code != "0x":
-        source = make_request({"module": "contract", "action": "getsourcecode", "address": address})
-        if source and isinstance(source, list) and "ContractName" in source[0]:
-            return f"Smart Contract Protocol [{source[0]['ContractName']}]"
-        return "Smart Contract (Unverified Protocol)"
+        return "Smart Contract Protocol (DEX/Bridge/Mixer)"
     return "Private Deposit/User Wallet Address"
 
 def run_pivot_trace():
@@ -97,11 +112,11 @@ def run_pivot_trace():
     outflows = get_pivot_outflows(CONSOLIDATION_WALLET)
     
     if not outflows:
-        print("📍 STATUS: Funds are currently sitting stagnant in this third wallet.")
-        print("➡️ Action: Set up an alert; the scammer hasn't moved the consolidated loot yet.")
+        print("\n📍 STATUS: Funds appear stagnant or API returned zero valid outflows.")
+        print("➡️ Action: Confirm block number or manually cross-check the address via Etherscan UI.")
         return
 
-    print(f"Found {len(outflows)} outbound movements from this hub after July 17th:\n")
+    print(f"\n✅ Found {len(outflows)} clear outbound movements after July 17th:\n")
     for tx in outflows:
         dest_type = check_destination_info(tx['to'])
         tx_time = datetime.fromtimestamp(int(tx['time'])).strftime('%Y-%m-%d %H:%M:%S')
