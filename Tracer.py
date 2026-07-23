@@ -3,157 +3,219 @@ import time
 import sys
 from datetime import datetime
 
-# Provided Forensic Parameters
+# USER PARAMETERS
 API_KEY = "ZFEQKMEBZ6T7NERFNZHEFM8NIE46HRHZ9A"
-TARGET_WALLET = "0x220fe14412bca438b3dbc5078e04f802f8f098e7"
 USDC_CONTRACT = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+START_BLOCK = "20315000"  # Focuses strictly from July 2026 onwards
 
-# Etherscan V2 Specific Architecture
+START_WALLETS = [
+    "0x675150eeec3cffa64d92d5d6ab5ab4cd4ef70633",
+    "0xb591b2a6382025d8a39c2ad8dfd4a88d422e4f14"
+]
+CONSOLIDATION_HUB = "0x220fe14412bca438b3dbc5078e04f802f8f098e7"
+
+# ETHERSCAN V2 CORRECTED ENDPOINTS
 BASE_URL = "https://etherscan.io"
 CHAIN_ID = "1"  # Ethereum Mainnet
-START_BLOCK = "20315000"  # Target timeframe benchmark
 
-def query_etherscan_v2(params):
-    """Executes rate-limited safety calls to Etherscan V2 structure."""
+# RECOGNIZED EXCHANGE & INTERACTION PLATFORMS
+KNOWN_ENTITIES = {
+    "0x28c6c06298d514db089934071355e5743bf21d60": ("CEX Wallet", "Binance: Hot Wallet"),
+    "0xdfd5293d8e347dfe59e90efd55b2956a1343963d": ("CEX Wallet", "Binance: Deposit Hub"),
+    "0xf39d22743551484a514244a31d873415410114e2": ("CEX Wallet", "Coinbase: Deposit Hub"),
+    "0x71660c4dbbd0211d6641edec3e16447810444521": ("CEX Wallet", "Kraken: Deposit"),
+    "0xe592427a0aece92de3edee1f18e0157c05861564": ("DEX Protocol", "Uniswap V3: Router"),
+    "0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45": ("DEX Protocol", "Uniswap V3: Router 2"),
+    "0x1111111254fb6c44bac0bed2854e76f90643097d": ("DEX Protocol", "1inch: Aggregator"),
+}
+
+def make_v2_request(params, max_retries=3):
+    """Executes safe V2 API calls with automated rate-limiting to prevent JSON decode errors."""
     params["apikey"] = API_KEY
     params["chainid"] = CHAIN_ID
-    time.sleep(1.1)  # Strict baseline throttle to respect free API key limit
-    try:
-        response = requests.get(BASE_URL, params=params, timeout=12)
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("status") == "1":
-                return data.get("result", [])
-    except Exception:
-        pass
-    return []
-
-def resolve_wallet_identity(address):
-    """Detects if address is a CEX deposit, a DEX contract, or an unknown user wallet."""
-    # 1. First check if it is a Smart Contract code address
-    code = query_etherscan_v2({"module": "proxy", "action": "eth_getCode", "address": address, "tag": "latest"})
     
-    if code and code != "0x":
-        # Pull contract metadata name to discover DEX platforms
-        source = query_etherscan_v2({"module": "contract", "action": "getsourcecode", "address": address})
+    for attempt in range(max_retries):
+        time.sleep(1.2)  # Strict delay to protect free API limits
+        try:
+            response = requests.get(BASE_URL, params=params, timeout=15)
+            if response.status_code in:
+                time.sleep(5)
+                continue
+            try:
+                data = response.json()
+                if isinstance(data, dict):
+                    return data
+            except ValueError:
+                time.sleep(3)
+                continue
+        except requests.exceptions.RequestException:
+            time.sleep(3)
+    return {}
+
+def inspect_address_type(address):
+    """Identifies the wallet classification and company link."""
+    addr_lower = address.lower()
+    if addr_lower in KNOWN_ENTITIES:
+        return KNOWN_ENTITIES[addr_lower]
+        
+    res = make_v2_request({"module": "proxy", "action": "eth_getCode", "address": address, "tag": "latest"})
+    code = res.get("result", "")
+    
+    if code and code != "0x" and isinstance(code, str):
+        source_res = make_v2_request({"module": "contract", "action": "getsourcecode", "address": address})
+        source = source_res.get("result", [])
         if source and isinstance(source, list) and len(source) > 0 and "ContractName" in source[0]:
-            name = source[0]["ContractName"]
-            return f"DEX (Decentralized Exchange Smart Contract)", name
-        return "Smart Contract", "Unknown Protocol / Custom Automated Script"
+            return "DEX Protocol / Contract", source[0]["ContractName"]
+        return "Smart Contract", "Unverified Custom Contract (Potential Mixer/Bridge)"
         
-    # 2. Check if the address matches known CEX / DEX hot wallets or common tracking tags
-    address_lower = address.lower()
-    known_labels = {
-        "0x28c6c06298d514db089934071355e5743bf21d60": ("CEX Wallet", "Binance"),
-        "0xdfd5293d8e347dfe59e90efd55b2956a1343963d": ("CEX Wallet", "Binance Deposit Hub"),
-        "0xf39d22743551484a514244a31d873415410114e2": ("CEX Wallet", "Coinbase Deposit Hub"),
-        "0x71660c4dbbd0211d6641edec3e16447810444521": ("CEX Wallet", "Kraken"),
-        "0xe592427a0aece92de3edee1f18e0157c05861564": ("DEX Protocol", "Uniswap V3 Router"),
-        "0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45": ("DEX Protocol", "Uniswap V3 Router 2"),
-        "0x1111111254fb6c44bac0bed2854e76f90643097d": ("DEX Protocol", "1inch Router"),
-    }
-    
-    if address_lower in known_labels:
-        return known_labels[address_lower]
-        
-    # Default fallback: If it has no contract code, it's an unlabelled private address/deposit bucket
-    return "Private Wallet", "Unlabeled Address (Likely Scammer Stash or New Exchange Account)"
+    return "Private Wallet", "Unlabeled Address (Scammer Core Hop or Fresh CEX Deposit Account)"
 
-def get_current_balances(wallet):
-    """Checks exact real-time balances for both Native ETH and USDC Token."""
-    usdc_res = query_etherscan_v2({
-        "module": "account", "action": "tokenbalance",
-        "contractaddress": USDC_CONTRACT, "address": wallet, "tag": "latest"
-    })
-    usdc_bal = float(usdc_res) / 10**6 if usdc_res and not isinstance(usdc_res, list) else 0.0
+def get_outflows(wallet_address):
+    """Tracks all possibilities: USDC, Standard ETH, and Internal Swaps."""
+    outflows = []
 
-    eth_res = query_etherscan_v2({
-        "module": "account", "action": "balance", "address": wallet, "tag": "latest"
-    })
-    eth_bal = float(eth_res) / 10**18 if eth_res and not isinstance(eth_res, list) else 0.0
-    
-    return usdc_bal, eth_bal
-
-def fetch_recent_tx_hashes(wallet):
-    """Gathers hashes of all outgoing transfers to flag historical changes."""
-    tx_hashes = set()
-    
-    usdc_txs = query_etherscan_v2({
+    # 1. USDC Outflows
+    res = make_v2_request({
         "module": "account", "action": "tokentx",
-        "contractaddress": USDC_CONTRACT, "address": wallet,
+        "contractaddress": USDC_CONTRACT, "address": wallet_address,
         "startblock": START_BLOCK, "endblock": "99999999", "sort": "asc"
     })
-    if isinstance(usdc_txs, list):
-        for tx in usdc_txs:
-            if tx['from'].lower() == wallet.lower():
-                tx_hashes.add(tx['hash'])
-                
-    eth_txs = query_etherscan_v2({
+    for tx in res.get("result", []) if isinstance(res.get("result"), list) else []:
+        if tx['from'].lower() == wallet_address.lower():
+            outflows.append({
+                "type": "USDC Token", "to": tx['to'],
+                "amount": f"{int(tx['value']) / 10**6:,.2f} USDC",
+                "hash": tx['hash'], "time": tx['timeStamp']
+            })
+
+    # 2. Native ETH Outflows
+    res = make_v2_request({
         "module": "account", "action": "txlist",
-        "address": wallet, "startblock": START_BLOCK,
+        "address": wallet_address, "startblock": START_BLOCK,
         "endblock": "99999999", "sort": "asc"
     })
-    if isinstance(eth_txs, list):
-        for tx in eth_txs:
-            if tx['from'].lower() == wallet.lower() and int(tx['value']) > 0:
-                tx_hashes.add(tx['hash'])
+    for tx in res.get("result", []) if isinstance(res.get("result"), list) else []:
+        if tx['from'].lower() == wallet_address.lower() and int(tx.get('value', 0)) > 0:
+            outflows.append({
+                "type": "Standard ETH", "to": tx['to'],
+                "amount": f"{int(tx['value']) / 10**18:.4f} ETH",
+                "hash": tx['hash'], "time": tx['timeStamp']
+            })
+
+    # 3. Internal Contract Swaps
+    res = make_v2_request({
+        "module": "account", "action": "txlistinternal",
+        "address": wallet_address, "startblock": START_BLOCK, "endblock": "99999999", "sort": "asc"
+    })
+    for tx in res.get("result", []) if isinstance(res.get("result"), list) else []:
+        if tx['from'].lower() == wallet_address.lower() and int(tx.get('value', 0)) > 0:
+            outflows.append({
+                "type": "INTERNAL DEX Swap", "to": tx['to'],
+                "amount": f"{int(tx['value']) / 10**18:.4f} ETH equiv",
+                "hash": tx['hash'], "time": tx['timeStamp']
+            })
+
+    outflows.sort(key=lambda x: int(x['time']))
+    return outflows
+
+def run_forensic_audit():
+    """Builds the complete text file trail map report."""
+    log_filename = "forensic_trail_log.txt"
+    print("[*] Launching multi-hop trail audit...")
+    
+    with open(log_filename, "w", encoding="utf-8") as f:
+        f.write("="*80 + "\n")
+        f.write(f"OFFICIAL CRYPTOCURRENCY FORENSIC TRAIL MAP\n")
+        f.write(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write("="*80 + "\n\n")
+        
+        f.write("[STAGE 1: INITIAL OUTFLOW ANALYSIS]\n")
+        for wallet in START_WALLETS:
+            f.write(f"\nOrigin Funnel Wallet: {wallet}\n")
+            outflows = get_outflows(wallet)
+            if not outflows:
+                f.write(" -> No outbound transactions detected in this block range.\n")
+            for tx in outflows:
+                w_type, company = inspect_address_type(tx['to'])
+                f.write(f"  ➔ [{tx['type']}] Sent {tx['amount']} to {tx['to']}\n")
+                f.write(f"    Classification: {w_type} | Company Linked: {company}\n")
+                f.write(f"    Tx Hash: {tx['hash']}\n")
+        
+        f.write("\n\n" + "="*80 + "\n")
+        f.write("[STAGE 2: CONSOLIDATION HUB ANALYSIS]\n")
+        f.write(f"Target Wallet Hub Address: {CONSOLIDATION_HUB}\n")
+        
+        hub_type, hub_company = inspect_address_type(CONSOLIDATION_HUB)
+        f.write(f"Hub Classification: {hub_type} | Company Linked: {hub_company}\n")
+        
+        hub_outflows = get_outflows(CONSOLIDATION_HUB)
+        if not hub_outflows:
+            f.write("\n📍 CURRENT END POINT STATUS: FUNDS ARE CURRENTLY STAGNANT\n")
+            f.write(f" -> The assets are sitting inside {CONSOLIDATION_HUB}.\n")
+        else:
+            f.write(f"\nOutbound movements from Consolidation Hub:\n")
+            for tx in hub_outflows:
+                w_type, company = inspect_address_type(tx['to'])
+                f.write(f"  ➔ [{tx['type']}] Dispatched {tx['amount']} to {tx['to']}\n")
+                f.write(f"    Destination Type: {w_type} | Company Linked: {company}\n")
+                f.write(f"    Tx Hash: {tx['hash']}\n")
                 
-    return tx_hashes
+    print(f"✅ Success! Trail report written to: '{log_filename}'")
 
-def monitor_loop():
+def run_live_monitor():
+    """Launches the clean, single-row console loop tracker for the final endpoint."""
+    print("\n" + "="*80)
+    print(f"LAUNCHING LIVE SENTRY MONITOR FOR CURRENT ENDPOINT")
     print("="*80)
-    print("      BLOCKCHAIN FORENSIC TARGET SCANNER (API V2 OVERHAUL)")
+    
+    wallet_type, company_name = inspect_address_type(CONSOLIDATION_HUB)
+    
+    print(f"● WALLET TARGET : {CONSOLIDATION_HUB}")
+    print(f"● TYPE CLASS    : {wallet_type}")
+    print(f"● COMPANY LINK  : {company_name}")
     print("="*80)
+    print("[*] Monitoring background engine. Checking for changes every 15s...")
+    print("    [Keep window open. Press Ctrl+C to stop monitor securely]\n")
     
-    # 1. Resolve Target Metadata ONCE at startup
-    print("[*] Contacting node registry to identify wallet platform...")
-    wallet_type, company_name = resolve_wallet_identity(TARGET_WALLET)
-    usdc_bal, eth_bal = get_current_balances(TARGET_WALLET)
-    known_outflows = fetch_recent_tx_hashes(TARGET_WALLET)
-    
-    print("\n" + "-"*80)
-    print(f" TARGET WALLET ADDRESS : {TARGET_WALLET}")
-    print(f" CLASSIFICATION TYPE   : {wallet_type}")
-    print(f" IDENTIFIED PLATFORM   : {company_name}")
-    print("-"*80)
-    print(f" CURRENT HOLDINGS      : {usdc_bal:,.2f} USDC  |  {eth_bal:.4f} ETH")
-    print(f" HISTORICAL OUTFLOWS   : {len(known_outflows)} recorded exit traces")
-    print("-"*80 + "\n")
-    
-    print("[*] Sentry Settle Mode Activated. Watching live for movement every 15s...")
-    print("    [Keep window running. Press Ctrl+C to terminate at any time]\n")
-
+    baseline_txs = set()
+    initial_flows = get_outflows(CONSOLIDATION_HUB)
+    for tx in initial_flows:
+        baseline_txs.add(tx['hash'])
+        
     while True:
         try:
-            current_usdc, current_eth = get_current_balances(TARGET_WALLET)
-            current_outflows = fetch_recent_tx_hashes(TARGET_WALLET)
+            res = make_v2_request({
+                "module": "account", "action": "tokenbalance",
+                "contractaddress": USDC_CONTRACT, "address": CONSOLIDATION_HUB, "tag": "latest"
+            })
+            raw_val = res.get("result", "0")
+            current_usdc = float(raw_val) / 10**6 if raw_val and not isinstance(raw_val, list) else 0.0
             
-            if len(current_outflows) > len(known_outflows):
-                new_txs = current_outflows - known_outflows
-                print("\n" + "🚨" * 15)
-                print("⚠️  CRITICAL INFRASTRUCTURE ALERT: FUNDS SENT OUTWARD!")
+            loop_flows = get_outflows(CONSOLIDATION_HUB)
+            current_hashes = {tx['hash'] for tx in loop_flows}
+            
+            if len(current_hashes) > len(baseline_txs):
+                new_txs = current_hashes - baseline_txs
+                print("\n" + "🚨" * 20)
+                print("⚠️  CRITICAL ALERT: ASSETS ARE MOVING OUT OF THE HUB RIGHT NOW!")
                 print(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                print(f"Executed Tx Signatures: {list(new_txs)}")
-                print(f"Remaining Capital Left: {current_usdc:,.2f} USDC")
-                print("🚨" * 15 + "\n")
+                print(f"New Outbound Tx Signatures Found: {list(new_txs)}")
+                print("🚨" * 20 + "\n")
                 
-                # Audible Terminal Bell
                 sys.stdout.write('\a')
                 sys.stdout.flush()
-                
-                known_outflows = current_outflows
+                baseline_txs = current_hashes
             else:
-                # Single-row updating terminal screen layout update
-                sys.stdout.write(f"\r[{datetime.now().strftime('%H:%M:%S')}] Live Sync Status: Stable Balances ({current_usdc:,.2f} USDC)")
+                sys.stdout.write(f"\r[{datetime.now().strftime('%H:%M:%S')}] Live Tracking Status: Active | Pool Balance: {current_usdc:,.2f} USDC")
                 sys.stdout.flush()
-            
+                
             time.sleep(15)
-            
         except KeyboardInterrupt:
-            print("\n\n[-] Sentry tracking paused securely. Program exited.")
+            print("\n\n[-] Sentry tracking stopped safely. Exiting framework.")
             break
-        except Exception as e:
+        except Exception:
             time.sleep(5)
 
 if __name__ == "__main__":
-    monitor_loop()
+    run_forensic_audit()
+    run_live_monitor()
