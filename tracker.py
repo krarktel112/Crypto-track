@@ -1,127 +1,137 @@
+import csv
 import time
-from collections import deque
-from curl_cffi import requests
+import requests
 
 # Configuration
 API_KEY = "ZFEQKMEBZ6T7NERFNZHEFM8NIE46HRHZ9A"
 BASE_URL = "https://etherscan.io"
+CSV_FILENAME = "crypto_trace_report.csv"
 
-def analyze_address_metadata(address):
-    """
-    Identifies common centralized hubs, exchanges, or smart contracts.
-    """
-    addr_lower = address.lower()
-    known_entities = {
-        "0x28c6c06298d514db089934071355e5743bf21d60": "🏢 CEX | Binance Hot Wallet",
-        "0xf977814e90da44bfa03b6295a0616a897441acec": "🏢 CEX | Binance Cold Storage",
-        "0x4775744cda72bc13506f36421d824d55b005b5aa": "🏢 CEX | Coinbase",
-        "0x71660c4db2e1eed855c378eac01ec4cf3673c683": "🏢 CEX | Kraken",
-        "0x68b3462838f4c16db3461120e8b625845242475e": "🔄 DEX | Uniswap V3 Router",
-        "0x3fc91a3afd903de2709942e6b9c690ee4313f88f": "🔄 DEX | Uniswap Universal Router",
-        "0x40ec5b33b54e0e8a33a975908c5ba1c14e5bbbdf": "🌉 BRIDGE | Polygon Bridge Gateway",
-    }
-    return known_entities.get(addr_lower, "👤 UNTAGGED WALLET / POTENTIAL SCAMMER HOP")
+def initialize_csv():
+    """Creates the CSV file and writes the header row."""
+    fields = [
+        "Layer", 
+        "Source Wallet", 
+        "Direction", 
+        "Destination Wallet", 
+        "Amount Moved", 
+        "Asset Token", 
+        "Transaction Date (UTC)", 
+        "Transaction Hash"
+    ]
+    with open(CSV_FILENAME, mode="w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(fields)
+    print(f"📊 Created empty spreadsheet: {CSV_FILENAME}")
 
-def trace_funds_to_present(start_wallets, max_layers=4):
+def log_to_csv(row_data):
+    """Appends a discovered transaction row to the spreadsheet."""
+    with open(CSV_FILENAME, mode="a", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(row_data)
+
+def trace_and_export(wallet_address, layer=1, action_type="tokentx"):
     """
-    Uses a Queue (BFS) to safely track fund hops sequentially up to the current date.
+    Queries Etherscan, processes outbound value transfers, and saves them to a CSV.
+    Safely toggles between ERC-20 tokens (USDT/USDC) and raw Ethereum (ETH).
     """
-    # Queue stores: (wallet_to_scan, current_layer_depth)
-    queue = deque()
-    for wallet in start_wallets:
-        queue.append((wallet, 1))
+    print(f"\n📡 [Layer {layer}] Scanning {action_type.upper()} history for: {wallet_address}")
     
-    # Global tracking sets to prevent infinite bouncing loops
-    visited_wallets = set(w.lower() for w in start_wallets)
-    processed_tx_hashes = set()
-
-    print(f"🚀 Initializing tracking loop up to current network time...")
-
-    while queue:
-        current_wallet, layer = queue.popleft()
+    params = {
+        "module": "account",
+        "action": action_type,
+        "address": wallet_address,
+        "startblock": "0",
+        "endblock": "99999999", # Up to today's current blocks in 2026
+        "page": "1",
+        "offset": "30",          # Captures up to 30 paths per wallet hop
+        "sort": "desc",
+        "apikey": API_KEY
+    }
+    
+    # Fix network routing context: Ignore broken local network proxies causing the NameResolutionError
+    session = requests.Session()
+    session.trust_env = False 
+    
+    try:
+        response = session.get(BASE_URL, params=params, timeout=20)
         
-        if layer > max_layers:
-            continue
-
-        print(f"\n[Layer {layer}] 🔍 Scanning Address: {current_wallet}")
+        if response.status_code != 200:
+            print(f"❌ Connection Blocked by Server (HTTP {response.status_code})")
+            return []
+            
+        data = response.json()
         
-        params = {
-            "chainid": "1",
-            "module": "account",
-            "action": "tokentx",  # Tracks stablecoins (USDT/USDC). Change to "txlist" for raw ETH.
-            "address": current_wallet,
-            "startblock": 0,       # Scan from original block creation
-            "endblock": 99999999,  # Up to the highest current block today
-            "page": 1,
-            "offset": 50,          # Pulls up to 50 transfers per hop
-            "sort": "desc",        # Starts with most recent transfers
-            "apikey": API_KEY
-        }
-
-        try:
-            response = requests.get(BASE_URL, params=params, impersonate="chrome")
-            if response.status_code != 200:
-                print(f"      ⚠️ Connection failed (HTTP {response.status_code})")
-                continue
-                
-            data = response.json()
+        if data.get("status") == "1" and data.get("message") == "OK":
+            transactions = data.get("result", [])
+            outbound_hops = []
+            outbound_count = 0
             
-            if data.get("status") == "1" and data.get("message") == "OK":
-                tx_list = data["result"]
-                outbound_found = False
-                
-                for tx in tx_list:
-                    # Isolate outbound token movement originating from this address
-                    if tx["from"].lower() == current_wallet.lower():
-                        tx_hash = tx["hash"]
+            for tx in transactions:
+                # Isolate money leaving the wallet we are investigating
+                if tx.get("from", "").lower() == wallet_address.lower():
+                    # Parse token metadata vs standard Ethereum chains
+                    symbol = tx.get("tokenSymbol", "ETH" if action_type == "txlist" else "TOKEN")
+                    decimals = int(tx.get("tokenDecimal", 18)) if action_type == "tokentx" else 18
+                    value = float(tx.get("value", 0)) / 10**decimals
+                    destination = tx.get("to", "")
+                    tx_hash = tx.get("hash", "")
+                    
+                    # Convert UNIX block timestamp to human-readable date format
+                    tx_time = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(int(tx.get("timeStamp", 0))))
+                    
+                    if value > 0 and destination:
+                        outbound_count += 1
+                        outbound_hops.append(destination)
                         
-                        # Skip if we already saw this transaction route
-                        if tx_hash in processed_tx_hashes:
-                            continue
-                        processed_tx_hashes.add(tx_hash)
-                        outbound_found = True
+                        # Write directly into the spreadsheet row template
+                        row = [layer, wallet_address, "OUTBOUND", destination, f"{value:.4f}", symbol, tx_time, tx_hash]
+                        log_to_csv(row)
                         
-                        next_wallet = tx["to"]
-                        token_symbol = tx.get("tokenSymbol", "TOKEN")
-                        decimals = int(tx.get("tokenDecimal", 18))
-                        value = float(tx["value"]) / 10**decimals
-                        tx_time = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(int(tx["timeStamp"])))
-                        
-                        # Only follow paths where value actually moved
-                        if value > 0:
-                            destination_profile = analyze_address_metadata(next_wallet)
-                            print(f"      ➡️ Moved: {value:.2f} {token_symbol}")
-                            print(f"         Date/Time: {tx_time}")
-                            print(f"         Destination: {next_wallet}")
-                            print(f"         Profile: {destination_profile}")
-                            print(f"         Tx Hash: {tx_hash}\n")
-                            
-                            # If it hits a CEX exchange, stop tracking this branch (trail goes dark on-chain)
-                            if "🏢 CEX" in destination_profile:
-                                print(f"         🛑 Funds reached a Centralized Exchange. Freeze point identified.")
-                                continue
-                                
-                            # Queue up the next wallet if it hasn't been scanned yet
-                            if next_wallet.lower() not in visited_wallets:
-                                visited_wallets.add(next_wallet.lower())
-                                queue.append((next_wallet, layer + 1))
-                                
-                if not outbound_found:
-                    print("      🛑 No further outbound movements found. Funds may currently reside here.")
-            else:
-                print(f"      ℹ️ Etherscan message: {data.get('result', 'No activity found.')}")
-                
-        except Exception as e:
-            print(f"      ❌ Script error scanning wallet: {e}")
+                        print(f"   ➡️ Exported: {value:.2f} {symbol} sent to {destination[:10]}...")
             
-        # Rate limit safety delay
-        time.sleep(1.0)
+            print(f"✅ Finished wallet. Logged {outbound_count} outbound transfers to CSV.")
+            return list(set(outbound_hops)) # Returns unique next hops to follow
+            
+        else:
+            # Automatic fallback: If ERC-20 token logs are completely empty, search raw ETH paths instead
+            if action_type == "tokentx":
+                print("ℹ️ No token activity found. Automatically scanning for standard ETH transfers...")
+                return trace_and_export(wallet_address, layer, action_type="txlist")
+                
+            print(f"ℹ️ Ledger Status: {data.get('result', 'No transaction activity recorded.')}")
+            return []
+            
+    except Exception as e:
+        print(f"❌ Network or Processing Fault: {e}")
+        return []
 
-# Entry point: Put all your known scam targets into the starting queue
-initial_targets = [
-    "0x675150eeec3cffa64d92d5d6ab5ab4cd4ef70633",
-    "0xb591b2a6382025d8a39c2ad8dfd4a88d422e4f14",
-    "0x220fe14412bca438b3dbc5078e04f802f8f098e7"
-]
+# Execution Entry Point
+if __name__ == "__main__":
+    initialize_csv()
+    
+    # Target addresses provided from your MetaSleuth and Cash App traces
+    initial_wallets = [
+        "0x675150eeec3cffa64d92d5d6ab5ab4cd4ef70633",
+        "0xb591b2a6382025d8a39c2ad8dfd4a88d422e4f14",
+        "0x220fe14412bca438b3dbc5078e04f802f8f098e7"
+    ]
+    
+    # Layer 1 Scan
+    layer_2_targets = []
+    for wallet in initial_wallets:
+        next_hops = trace_and_export(wallet, layer=1)
+        layer_2_targets.extend(next_hops)
+        time.sleep(1.0) # Maintain free-tier API rate limits safely
+        
+    # Layer 2 Scan (Automatically follows the money one step deeper if targets exist)
+    layer_2_targets = list(set(layer_2_targets)) # Clear duplicates
+    if layer_2_targets:
+        print(f"\n==================================================")
+        print(f"🔄 LAYER 2: Automatically tracing next-generation hops...")
+        print(f"==================================================")
+        for wallet in layer_2_targets[:10]: # Safe limit to top 10 secondary wallets to prevent massive bloat
+            trace_and_export(wallet, layer=2)
+            time.sleep(1.0)
 
-trace_funds_to_present(initial_targets, max_layers=4)
+    print(f"\n🏁 Process Complete. Open '{CSV_FILENAME}' to inspect your forensic ledger data timeline.")
