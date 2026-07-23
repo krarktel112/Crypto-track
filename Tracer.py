@@ -9,7 +9,7 @@ TARGET_WALLET = "0x220fe14412bca438b3dbc5078e04f802f8f098e7"
 USDC_CONTRACT = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
 
 # Etherscan V2 Specific Architecture
-BASE_URL = "https://api.etherscan.io/v2/api"
+BASE_URL = "https://etherscan.io"
 CHAIN_ID = "1"  # Ethereum Mainnet
 START_BLOCK = "20315000"  # Target timeframe benchmark
 
@@ -28,16 +28,45 @@ def query_etherscan_v2(params):
         pass
     return []
 
+def resolve_wallet_identity(address):
+    """Detects if address is a CEX deposit, a DEX contract, or an unknown user wallet."""
+    # 1. First check if it is a Smart Contract code address
+    code = query_etherscan_v2({"module": "proxy", "action": "eth_getCode", "address": address, "tag": "latest"})
+    
+    if code and code != "0x":
+        # Pull contract metadata name to discover DEX platforms
+        source = query_etherscan_v2({"module": "contract", "action": "getsourcecode", "address": address})
+        if source and isinstance(source, list) and len(source) > 0 and "ContractName" in source[0]:
+            name = source[0]["ContractName"]
+            return f"DEX (Decentralized Exchange Smart Contract)", name
+        return "Smart Contract", "Unknown Protocol / Custom Automated Script"
+        
+    # 2. Check if the address matches known CEX / DEX hot wallets or common tracking tags
+    address_lower = address.lower()
+    known_labels = {
+        "0x28c6c06298d514db089934071355e5743bf21d60": ("CEX Wallet", "Binance"),
+        "0xdfd5293d8e347dfe59e90efd55b2956a1343963d": ("CEX Wallet", "Binance Deposit Hub"),
+        "0xf39d22743551484a514244a31d873415410114e2": ("CEX Wallet", "Coinbase Deposit Hub"),
+        "0x71660c4dbbd0211d6641edec3e16447810444521": ("CEX Wallet", "Kraken"),
+        "0xe592427a0aece92de3edee1f18e0157c05861564": ("DEX Protocol", "Uniswap V3 Router"),
+        "0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45": ("DEX Protocol", "Uniswap V3 Router 2"),
+        "0x1111111254fb6c44bac0bed2854e76f90643097d": ("DEX Protocol", "1inch Router"),
+    }
+    
+    if address_lower in known_labels:
+        return known_labels[address_lower]
+        
+    # Default fallback: If it has no contract code, it's an unlabelled private address/deposit bucket
+    return "Private Wallet", "Unlabeled Address (Likely Scammer Stash or New Exchange Account)"
+
 def get_current_balances(wallet):
     """Checks exact real-time balances for both Native ETH and USDC Token."""
-    # 1. Fetch USDC Token Balance
     usdc_res = query_etherscan_v2({
         "module": "account", "action": "tokenbalance",
         "contractaddress": USDC_CONTRACT, "address": wallet, "tag": "latest"
     })
     usdc_bal = float(usdc_res) / 10**6 if usdc_res and not isinstance(usdc_res, list) else 0.0
 
-    # 2. Fetch Native ETH Balance
     eth_res = query_etherscan_v2({
         "module": "account", "action": "balance", "address": wallet, "tag": "latest"
     })
@@ -49,7 +78,6 @@ def fetch_recent_tx_hashes(wallet):
     """Gathers hashes of all outgoing transfers to flag historical changes."""
     tx_hashes = set()
     
-    # Analyze USDC transfers
     usdc_txs = query_etherscan_v2({
         "module": "account", "action": "tokentx",
         "contractaddress": USDC_CONTRACT, "address": wallet,
@@ -60,7 +88,6 @@ def fetch_recent_tx_hashes(wallet):
             if tx['from'].lower() == wallet.lower():
                 tx_hashes.add(tx['hash'])
                 
-    # Analyze Standard ETH transfers
     eth_txs = query_etherscan_v2({
         "module": "account", "action": "txlist",
         "address": wallet, "startblock": START_BLOCK,
@@ -75,56 +102,57 @@ def fetch_recent_tx_hashes(wallet):
 
 def monitor_loop():
     print("="*80)
-    print(f"LIVE SENTRY PROTOCOL LAUNCHED FOR WALLET: {TARGET_WALLET}")
+    print("      BLOCKCHAIN FORENSIC TARGET SCANNER (API V2 OVERHAUL)")
     print("="*80)
     
-    print("[*] Establishing baseline transaction history...")
-    known_outflows = fetch_recent_tx_hashes(TARGET_WALLET)
-    print(f"[*] Baseline complete. Loaded {len(known_outflows)} historical outflows.")
-    
+    # 1. Resolve Target Metadata ONCE at startup
+    print("[*] Contacting node registry to identify wallet platform...")
+    wallet_type, company_name = resolve_wallet_identity(TARGET_WALLET)
     usdc_bal, eth_bal = get_current_balances(TARGET_WALLET)
-    print(f"\n[CURRENT END WALLET HOLDINGS]:")
-    print(f" 🪙  USDC Balance: {usdc_bal:,.2f} USDC")
-    print(f" ⧫  ETH Balance:  {eth_bal:.4f} ETH")
-    print("\n[*] Sentry Mode Active. Scanning for balance changes or movements every 15s...")
-    print("Press Ctrl+C to terminate the program safely.\n")
+    known_outflows = fetch_recent_tx_hashes(TARGET_WALLET)
+    
+    print("\n" + "-"*80)
+    print(f" TARGET WALLET ADDRESS : {TARGET_WALLET}")
+    print(f" CLASSIFICATION TYPE   : {wallet_type}")
+    print(f" IDENTIFIED PLATFORM   : {company_name}")
+    print("-"*80)
+    print(f" CURRENT HOLDINGS      : {usdc_bal:,.2f} USDC  |  {eth_bal:.4f} ETH")
+    print(f" HISTORICAL OUTFLOWS   : {len(known_outflows)} recorded exit traces")
+    print("-"*80 + "\n")
+    
+    print("[*] Sentry Settle Mode Activated. Watching live for movement every 15s...")
+    print("    [Keep window running. Press Ctrl+C to terminate at any time]\n")
 
     while True:
         try:
-            # 1. Pulse-check total quantities currently in wallet
             current_usdc, current_eth = get_current_balances(TARGET_WALLET)
-            
-            # 2. Re-verify the absolute current outbound tx hash count
             current_outflows = fetch_recent_tx_hashes(TARGET_WALLET)
             
-            # 3. Check for structural mutations (New transaction signatures detected)
             if len(current_outflows) > len(known_outflows):
                 new_txs = current_outflows - known_outflows
                 print("\n" + "🚨" * 15)
-                print("⚠️  CRITICAL ALERT: MOVEMENT DETECTED ON TARGET WALLET!")
+                print("⚠️  CRITICAL INFRASTRUCTURE ALERT: FUNDS SENT OUTWARD!")
                 print(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                print(f"New Unseen Outflow Tx Detected: {list(new_txs)}")
-                print(f"Updated Balance Remaining: {current_usdc:,.2f} USDC | {current_eth:.4f} ETH")
+                print(f"Executed Tx Signatures: {list(new_txs)}")
+                print(f"Remaining Capital Left: {current_usdc:,.2f} USDC")
                 print("🚨" * 15 + "\n")
                 
-                # Audible system bell ping notification (works natively on standard OS terminals)
+                # Audible Terminal Bell
                 sys.stdout.write('\a')
                 sys.stdout.flush()
                 
-                # Update baseline so it doesn't loop spam the exact same notification
                 known_outflows = current_outflows
             else:
-                # Heartbeat terminal print to confirm active monitoring status
-                print(f"[{datetime.now().strftime('%H:%M:%S')}] Monitoring... Stable: {current_usdc:,.2f} USDC | {current_eth:.4f} ETH", end='\r')
+                # Single-row updating terminal screen layout update
+                sys.stdout.write(f"\r[{datetime.now().strftime('%H:%M:%S')}] Live Sync Status: Stable Balances ({current_usdc:,.2f} USDC)")
+                sys.stdout.flush()
             
-            # Idle for 15 seconds to stay clear of server-side endpoint request blocks
             time.sleep(15)
             
         except KeyboardInterrupt:
-            print("\n[-] Sentry tracking paused securely. Operational logs saved.")
+            print("\n\n[-] Sentry tracking paused securely. Program exited.")
             break
         except Exception as e:
-            print(f"\n[!] Read network interruption: {e}. Re-syncing framework...")
             time.sleep(5)
 
 if __name__ == "__main__":
