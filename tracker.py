@@ -146,4 +146,4 @@ timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
 output_csv_filename = f"crypto_trace_{timestamp_str}.csv"
 
 print(f"Starting secure trace on pooling wallet. Saving progress to {output_csv_filename}...")
-trace_wallet(pooling_wallet, output_file=output_csv_filename, depth=1, max_depth=5)
+trace_wallet(pooling_wallet, output_file=output_csv_filename, depth=1, max_depth=200)
