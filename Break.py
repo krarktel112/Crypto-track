@@ -1,4 +1,3 @@
-45zTsSZg5jYfF7VjVg2mR9AYk548ZPe7HfKCTiAP6PDg63QpvdEYWpkacc9gYjULxdZ4mmpmZPXB6QAUiXWUnGE3QCTxSJp
 import requests, time, os
 
 def sell(x):
