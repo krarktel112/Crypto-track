@@ -115,7 +115,6 @@ class CryptoTracer:
     def __init__(self, api_key: str, csv_filepath: str = CSV_FILE_PATH):
         self.api_key = api_key
         self.csv_filepath = csv_filepath
-        self.monitored_addresses = set()
         self.processed_txs = set()
         self.trace_history = []
         self._ensure_csv_header()
@@ -151,7 +150,7 @@ class CryptoTracer:
             console.print(f"[bold red]Failed to append record to CSV: {e}[/bold red]")
 
     def load_state_from_csv(self) -> bool:
-        """Reads existing CSV log on startup to resume tracking without duplicate records."""
+        """Reads existing CSV log on startup to avoid processing duplicates."""
         if not os.path.exists(self.csv_filepath):
             return False
 
@@ -183,15 +182,10 @@ class CryptoTracer:
                         "block": row.get("block")
                     }
                     self.trace_history.append(rec)
-
-                    if to_addr and to_type in ["EOA", "Contract/DEX"]:
-                        self.monitored_addresses.add(to_addr.lower())
-                    
                     count += 1
 
             if count > 0:
-                console.print(f"[bold green]📂 Loaded {count} transaction(s) from {self.csv_filepath}![/bold green]")
-                console.print(f"Active monitoring pool: {len(self.monitored_addresses)} address(es).\n")
+                console.print(f"[bold green]📂 Loaded {count} prior transaction(s) from {self.csv_filepath}[/bold green]\n")
                 return True
         except Exception as e:
             console.print(f"[bold red]Error reading existing CSV {self.csv_filepath}: {e}[/bold red]")
@@ -280,29 +274,9 @@ class CryptoTracer:
             "block": int(block_number, 16) if block_number else "Pending"
         }
 
-    def fetch_outgoing_txs(self, address: str) -> list:
-        params = {
-            "module": "account",
-            "action": "txlist",
-            "address": address,
-            "startblock": 0,
-            "endblock": 99999999,
-            "page": 1,
-            "offset": 50,
-            "sort": "desc",
-            "apikey": self.api_key
-        }
-        try:
-            res = requests.get(ETHERSCAN_BASE_URL, params=params, timeout=10).json()
-            if res.get("status") == "1" and isinstance(res.get("result"), list):
-                return [tx for tx in res["result"] if tx.get("from", "").lower() == address.lower()]
-        except Exception as e:
-            console.print(f"[red]Error fetching transactions for {address}: {e}[/red]")
-        return []
-
-    def initialize_trace(self, starting_hashes: list):
-        """Processes starting seed transactions with working progress indicators."""
-        with console.status("[bold green]⚙️ Working: Fetching initial transaction details & classifying entities...", spinner="dots"):
+    def execute_trace(self, starting_hashes: list):
+        """Processes the target transactions once."""
+        with console.status("[bold green]⚙️ Working: Fetching transaction details & classifying entities...", spinner="dots"):
             for tx_hash in starting_hashes:
                 if tx_hash in self.processed_txs:
                     continue
@@ -313,10 +287,6 @@ class CryptoTracer:
                     self.trace_history.append(tx_data)
                     self.append_to_csv(tx_data)
 
-                    dest = tx_data["to"]
-                    if tx_data["to_type"]["type"] in ["EOA", "Contract/DEX"]:
-                        self.monitored_addresses.add(dest.lower())
-
                     alert_msg = (
                         f"Hash: `{tx_hash[:10]}...`\n"
                         f"From: `{tx_data['from']}` ({tx_data['from_type']['type']})\n"
@@ -324,70 +294,15 @@ class CryptoTracer:
                         f"Amount: {tx_data['amount_eth']:.4f} ETH\n"
                         f"Time: {tx_data['timestamp']}"
                     )
-                    trigger_alerts("Seed Transaction Detected", alert_msg)
+                    trigger_alerts("Transaction Traced", alert_msg)
                     time.sleep(0.3)
 
-    def poll_new_transactions(self) -> bool:
-        """Polls active wallets and shows dynamic work progress during state updates."""
-        new_events = False
-        addresses_to_scan = list(self.monitored_addresses)
-
-        with console.status(f"[bold cyan]⚙️ Working: Scanning {len(addresses_to_scan)} monitored wallet(s) for outgoing transfers...", spinner="line"):
-            for addr in addresses_to_scan:
-                txs = self.fetch_outgoing_txs(addr)
-                for tx in txs:
-                    tx_hash = tx.get("hash")
-                    if tx_hash in self.processed_txs:
-                        continue
-
-                    value_eth = int(tx.get("value", 0)) / 10**18
-                    ts_int = int(tx.get("timeStamp", time.time()))
-                    formatted_ts = datetime.fromtimestamp(ts_int, timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-
-                    to_addr = tx.get("to", "")
-                    to_class = self.classify_address(to_addr)
-                    from_class = self.classify_address(addr)
-
-                    record = {
-                        "tx_hash": tx_hash,
-                        "from": addr,
-                        "from_type": from_class,
-                        "to": to_addr,
-                        "to_type": to_class,
-                        "amount_eth": value_eth,
-                        "timestamp": formatted_ts,
-                        "block": tx.get("blockNumber")
-                    }
-
-                    self.processed_txs.add(tx_hash)
-                    self.trace_history.append(record)
-                    new_events = True
-
-                    self.append_to_csv(record)
-
-                    if to_class["type"] in ["EOA"]:
-                        self.monitored_addresses.add(to_addr.lower())
-
-                    alert_msg = (
-                        f"New Downstream Transfer Detected!\n"
-                        f"Hash: `{tx_hash[:10]}...`\n"
-                        f"From: `{addr}`\n"
-                        f"To: `{to_addr}` ({to_class['type']} - {to_class['label']})\n"
-                        f"Amount: {value_eth:.4f} ETH\n"
-                        f"Time: {formatted_ts}"
-                    )
-                    trigger_alerts("Downstream Movement Detected", alert_msg)
-                
-                time.sleep(0.2)
-
-        return new_events
-
 # ==============================================================================
-# UI DISPLAY & MAIN LOOP
+# UI DISPLAY & EXECUTION
 # ==============================================================================
 
-def render_dashboard(tracer: CryptoTracer, mode: str, detail_text: str) -> Table:
-    title_text = f"💎 Crypto Trace Dashboard | Status: [bold underline green]{mode}[/bold underline green]"
+def render_dashboard(tracer: CryptoTracer) -> Table:
+    title_text = "💎 Crypto Trace Dashboard | Status: [bold cyan]TRACE COMPLETE[/bold cyan]"
     table = Table(title=title_text, expand=True)
 
     table.add_column("Timestamp", style="cyan", no_wrap=True)
@@ -397,7 +312,7 @@ def render_dashboard(tracer: CryptoTracer, mode: str, detail_text: str) -> Table
     table.add_column("Entity Type", style="bold magenta")
     table.add_column("Amount (ETH)", justify="right", style="bold green")
 
-    for item in tracer.trace_history[-12:]:
+    for item in tracer.trace_history:
         dest_type = item['to_type']['type']
         
         if dest_type == "CEX":
@@ -424,37 +339,18 @@ def main():
     # 1. Load existing state if available
     tracer.load_state_from_csv()
     
-    # 2. Run initial trace with work spinner
-    tracer.initialize_trace(STARTING_TXS)
+    # 2. Run trace
+    tracer.execute_trace(STARTING_TXS)
 
-    console.print(f"\n[bold green]✅ Initial trace completed successfully![/bold green]\n")
-    time.sleep(1)
-
-    poll_interval = 12
-    counter = 0
-
-    try:
-        while True:
-            counter += 1
-            
-            # --- PHASE 1: WORKING ON TRACE ---
-            tracer.poll_new_transactions()
-            
-            # --- PHASE 2: DONE / CURRENTLY MONITORING ---
-            status_text = f"Loop #{counter} | Monitored Targets: {len(tracer.monitored_addresses)} | Logged Txs: {len(tracer.processed_txs)}"
-            
-            console.clear()
-            console.print(render_dashboard(tracer, "🟢 CURRENTLY MONITORING", status_text))
-            console.print(Panel(
-                f"[bold green]📡 CURRENTLY MONITORING LIVE BLOCKCHAIN...[/bold green]\n"
-                f"{status_text}\n"
-                f"Next network check in {poll_interval}s. (Press Ctrl+C to stop)",
-                title="Active Watcher Status"
-            ))
-
-            time.sleep(poll_interval)
-    except KeyboardInterrupt:
-        console.print(f"\n[bold green]📁 Trace state saved to '{CSV_FILE_PATH}'. Exiting safely.[/bold green]")
+    # 3. Output results and exit cleanly
+    console.clear()
+    console.print(render_dashboard(tracer))
+    console.print(Panel(
+        f"[bold green]✅ Trace completed successfully![/bold green]\n"
+        f"Processed Transactions: {len(tracer.processed_txs)}\n"
+        f"Results saved to: '{CSV_FILE_PATH}'",
+        title="Execution Summary"
+    ))
 
 if __name__ == "__main__":
     main()
