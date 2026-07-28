@@ -1,278 +1,328 @@
-import time
-import json
 import os
-import pandas as pd
-from datetime import datetime
-from curl_cffi import requests
-from tqdm import tqdm  # Ensure this is installed: pip install tqdm
+import sys
+import time
+import datetime
+import logging
+import requests
+from typing import Dict, List, Set, Tuple, Optional
 
-# Configuration
-API_KEY = "ZFEQKMEBZ6T7NERFNZHEFM8NIE46HRHZ9A"
-BASE_URL = "https://api.etherscan.io/v2/api"
-MONITOR_INTERVAL = 15  # Seconds between monitoring checks
+# --- Rich Formatting for Progress & Dashboard Output ---
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich.live import Live
+from rich.spinner import Spinner
 
-# Expanded list of prominent CEX Hot Wallets and Deposit Contracts
-KNOWN_ENTITIES = {
-    # Binance
-    "0x28c6c06298d514db089934071355e5ba621b4d23": {"name": "Binance 14", "type": "CEX"},
-    "0xdfd5293d8e347dfe59e90efd55b2956a1343963d": {"name": "Binance Hot Wallet", "type": "CEX"},
-    "0x56eddb7aa87536c09ccc2793473599fd21a8b17f": {"name": "Binance 3", "type": "CEX"},
-    "0xf977814e90da44bfa03b6295a0616a897441acec": {"name": "Binance 8", "type": "CEX"},
-    
-    # Coinbase
-    "0x47719227919697a59af255d81465e53b49938660": {"name": "Coinbase 1", "type": "CEX"},
-    "0x5038289769165b77a8ce8e30dfb1182755847eb5": {"name": "Coinbase 2", "type": "CEX"},
-    "0xddfabcdc4d8ffc6d5beaf154f18b778f892a0740": {"name": "Coinbase 3", "type": "CEX"},
-    
-    # Kraken
-    "0x267be1c1d684f78cb4f6a176c4911b741e4ffdc0": {"name": "Kraken 1", "type": "CEX"},
-    "0x0a267cf51ef03a5293b33e22e30ce6f664242643": {"name": "Kraken 2", "type": "CEX"},
-    
-    # OKX
-    "0x6cc5f688a315f3dc28a7781717a9a798a59fda7b": {"name": "OKX 1", "type": "CEX"},
-    "0xa7efae728d2936e78bda97dc267687568dd593f3": {"name": "OKX 2", "type": "CEX"},
+console = Console()
 
-    # Bybit
-    "0xee5b5b9238e153b4e813f462a64c2ff327464201": {"name": "Bybit 1", "type": "CEX"},
-    
-    # Gate.io
-    "0x0d0707963952f2fba59dd06f2b425ace40b492fe": {"name": "Gate.io 1", "type": "CEX"},
-    
-    # Core DEX Routers for reference
-    "0xef1c6e67703c7bd7107eed8303fbe6ec2554bf6b": {"name": "Uniswap V3: Router 2", "type": "DEX"},
-    "0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45": {"name": "Uniswap V3: Router", "type": "DEX"},
-    "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": {"name": "Uniswap V2: Router 2", "type": "DEX"},
-    "0x1111111254fb6c44bac0bed2854e76f90643097d": {"name": "1inch: Aggregator V5", "type": "DEX"},
+# ==========================================
+# CONFIGURATION & INITIAL SETUP
+# ==========================================
+ETHERSCAN_API_KEY = "ZFEQKMEBZ6T7NERFNZHEFM8NIE46HRHZ9A"
+ETHERSCAN_BASE_URL = "https://api.etherscan.io/api"
+
+STARTING_TX_HASHES = [
+    "0x8274d085c74164f1f2a8e67b0ffeccd95a3c74e51c43d289de1a535d9bdb9ae0",
+    "0x447ed6764b719bc3921f699e836a12d1394f6390d423a1c71c3e04cda731f217",
+]
+
+# Optional Alert Configs (Leave blank or set via environment variables to activate)
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")  # e.g., "123456789:ABC..."
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")      # e.g., "@mychannel" or "1234567"
+
+SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASS = os.getenv("SMTP_PASS", "")
+EMAIL_RECEIVER = os.getenv("EMAIL_RECEIVER", "")
+
+POLL_INTERVAL_SECONDS = 30  # Interval for continuous monitoring loop
+
+# Known DEX Routers & Exchange Addresses (Database expander)
+KNOWN_DEX_ROUTERS = {
+    "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": "Uniswap V2 Router",
+    "0xe592427a0aece92de3edee1f18e0157c05861564": "Uniswap V3 Router",
+    "0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45": "Uniswap Universal Router",
+    "0xd9e1ce17f2641f24ae83637ab66a2cca9c378804": "Sushiswap Router",
+    "0x1111111254fb6c44bac0bed2854e76f90643097d": "1inch v5 Router",
+    "0xdef1c0ded9bec7f1a1670819833240f027b25eff": "0x Exchange Router",
 }
 
-# Sets and lists to store execution summaries globally
-visited_wallets = set()
-cex_discoveries = []
-logged_tx_hashes = set()
+KNOWN_CEX_WALLETS = {
+    "0x28c6c06298d514db089934071355e5743bf21d60": "Binance Hot Wallet 14",
+    "0x21a31ee1afc51d94c2efccaa2092ad1028285549": "Binance Hot Wallet 1",
+    "0x50310926a4b41200e77a28e35f37756dbdafb3b0": "Coinbase Deposit Wallet",
+    "0x7160ec948a287c701f2f814d4850d57e8ebff575": "Kraken Hot Wallet",
+    "0x0d0707963952f2a722999f17044806a57c281313": "OKX Hot Wallet",
+}
 
-def identify_address_type(address):
-    if not address:
-        return "Unknown", "Wallet/Contract"
-    addr_lower = address.lower()
-    if addr_lower in KNOWN_ENTITIES:
-        return KNOWN_ENTITIES[addr_lower]["type"], KNOWN_ENTITIES[addr_lower]["name"]
-    return "Unknown", "Wallet/Contract"
+# ==========================================
+# NOTIFICATION SYSTEM
+# ==========================================
+def send_telegram_alert(message: str):
+    """Sends notification to Telegram if credentials are set."""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "Markdown"}
+    try:
+        requests.post(url, json=payload, timeout=10)
+    except Exception as e:
+        console.print(f"[bold red]Failed to send Telegram alert:[/bold red] {e}")
 
-def is_tx_already_logged(tx_hash, file_path):
-    """Check if the transaction hash is already saved in the CSV or in memory."""
-    if tx_hash in logged_tx_hashes:
-        return True
-    if os.path.isfile(file_path):
+def send_email_alert(subject: str, body: str):
+    """Sends notification email via SMTP if credentials are set."""
+    if not SMTP_USER or not SMTP_PASS or not EMAIL_RECEIVER:
+        return
+    import smtplib
+    from email.mime.text import MIMEText
+
+    msg = MIMEText(body)
+    msg["Subject"] = subject
+    msg["From"] = SMTP_USER
+    msg["To"] = EMAIL_RECEIVER
+
+    try:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(SMTP_USER, [EMAIL_RECEIVER], msg.as_string())
+    except Exception as e:
+        console.print(f"[bold red]Failed to send Email alert:[/bold red] {e}")
+
+def notify(title: str, text: str):
+    """Unified alert handler."""
+    msg = f"🚨 *{title}*\n\n{text}"
+    send_telegram_alert(msg)
+    send_email_alert(f"[Crypto Tracker Alert] {title}", text)
+
+# ==========================================
+# ETHERSCAN CLIENT & CLASSIFIER
+# ==========================================
+class EtherscanTracker:
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.monitored_addresses: Set[str] = set()
+        self.seen_tx_hashes: Set[str] = set()
+        self.address_labels: Dict[str, str] = {}
+
+    def _get(self, params: dict) -> dict:
+        params["apikey"] = self.api_key
+        res = requests.get(ETHERSCAN_BASE_URL, params=params, timeout=15)
+        res.raise_for_status()
+        return res.json()
+
+    def classify_address(self, address: str) -> Tuple[str, str]:
+        """
+        Determines if an address is CEX, DEX, Smart Contract, or standard EOA.
+        Returns: (type_label, detailed_name)
+        """
+        addr_lower = address.lower()
+
+        if addr_lower in KNOWN_CEX_WALLETS:
+            return "CEX", KNOWN_CEX_WALLETS[addr_lower]
+
+        if addr_lower in KNOWN_DEX_ROUTERS:
+            return "DEX", KNOWN_DEX_ROUTERS[addr_lower]
+
+        # Check if address is a smart contract code
+        params = {"module": "proxy", "action": "eth_getCode", "address": address}
         try:
-            df = pd.read_csv(file_path, usecols=['tx_hash'])
-            if tx_hash in df['tx_hash'].values:
-                logged_tx_hashes.add(tx_hash)
-                return True
+            data = self._get(params)
+            code = data.get("result", "0x")
+            if code and code != "0x":
+                # It is a Smart Contract, check source code info on Etherscan
+                contract_info = self.get_contract_info(address)
+                if contract_info:
+                    name = contract_info.get("ContractName", "Unknown Contract")
+                    if any(x in name.lower() for x in ["router", "swap", "pool", "vault", "pair"]):
+                        return "DEX / DeFi Protocol", name
+                    if any(x in name.lower() for x in ["binance", "coinbase", "kraken", "okx"]):
+                        return "CEX", name
+                    return "Smart Contract", name
+                return "Smart Contract", "Unverified Contract"
         except Exception:
             pass
-    return False
 
-def save_transaction_to_csv(tx_data, file_path):
-    df_new = pd.DataFrame([tx_data])
-    if not os.path.isfile(file_path):
-        df_new.to_csv(file_path, index=False)
-    else:
-        df_new.to_csv(file_path, mode='a', header=False, index=False)
-    logged_tx_hashes.add(tx_data['tx_hash'])
+        return "EOA Wallet", "Personal Wallet"
 
-def fetch_latest_txs(wallet_address, page=1, offset=20):
-    """Fetch transactions for a given wallet address."""
-    params = {
-        "chainid": "1",
-        "module": "account",
-        "action": "txlist",
-        "address": wallet_address,
-        "startblock": 0,
-        "endblock": 99999999,
-        "page": page,
-        "offset": offset,
-        "sort": "desc",
-        "apikey": API_KEY
-    }
-    try:
-        time.sleep(0.2)
-        response = requests.get(BASE_URL, params=params, impersonate="chrome")
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("status") == "1" and data.get("message") == "OK":
-                return data.get("result", [])
-    except Exception as e:
-        print(f"❌ API Request error: {e}")
-    return []
+    def get_contract_info(self, address: str) -> Optional[dict]:
+        params = {"module": "contract", "action": "getsourcecode", "address": address}
+        try:
+            res = self._get(params)
+            if res.get("status") == "1" and res.get("result"):
+                return res["result"][0]
+        except Exception:
+            pass
+        return None
 
-def trace_wallet(wallet_address, output_file, depth=1):
-    # Normalize address to avoid case mismatch duplicate loops
-    wallet_norm = wallet_address.lower()
-    if wallet_norm in visited_wallets:
-        return
-    visited_wallets.add(wallet_norm)
+    def get_transaction_details(self, tx_hash: str) -> Optional[dict]:
+        """Fetches detailed information on a single transaction by hash."""
+        params = {"module": "proxy", "action": "eth_getTransactionByHash", "txhash": tx_hash}
+        tx_data = self._get(params).get("result")
+        if not tx_data:
+            return None
 
-    print(f"\n" + "  " * (depth - 1) + f"└── [Layer {depth}] Scanning Outbound from: {wallet_address}")
-    
-    page = 1
-    offset = 100  
-    has_more_tx = True
-    found_outbound = False
-    
-    pbar = tqdm(desc=f"Layer {depth} API Pages", unit="page", leave=False)
-    
-    while has_more_tx:
-        tx_list = fetch_latest_txs(wallet_address, page=page, offset=offset)
-        
-        if not tx_list:
-            has_more_tx = False
-            if not found_outbound and page == 1:
-                tqdm.write("  " * depth + "🛑 No outgoing value transfers found from this address.")
-            break
-            
-        if len(tx_list) < offset:
-            has_more_tx = False
-            
-        for tx in tx_list:
-            if tx["from"].lower() == wallet_address.lower() and float(tx["value"]) > 0:
-                found_outbound = True
-                
-                # Skip if already processed
-                if is_tx_already_logged(tx['hash'], output_file):
-                    continue
+        # Receipt to check status and gas used
+        params_receipt = {"module": "proxy", "action": "eth_getTransactionReceipt", "txhash": tx_hash}
+        receipt = self._get(params_receipt).get("result", {})
 
-                ether_value = float(tx["value"]) / 10**18
-                next_wallet = tx["to"]
-                tx_time = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(int(tx["timeStamp"])))
-                
-                entity_type, entity_name = identify_address_type(next_wallet)
-                type_flag = f"[{entity_type} - {entity_name}]" if entity_type != "Unknown" else "[Wallet/Contract]"
-                
-                tqdm.write("  " * depth + f"➡️ Sent {ether_value:.4f} ETH to {next_wallet} {type_flag} ({tx_time})")
-                
-                tx_record = {
-                    "layer": depth,
-                    "timestamp": tx_time,
-                    "tx_hash": tx['hash'],
-                    "from_address": wallet_address,
-                    "to_address": next_wallet,
-                    "eth_value": ether_value,
-                    "destination_type": entity_type,
-                    "destination_name": entity_name
-                }
-                
-                save_transaction_to_csv(tx_record, output_file)
-                
-                if entity_type == "CEX":
-                    tqdm.write("  " * depth + f"🛑 Flow hit a CEX ({entity_name}). Stopping branch exploration.")
-                    cex_discoveries.append({
-                        "CEX Name": entity_name,
-                        "Address": next_wallet,
-                        "Timestamp": tx_time,
-                        "Tx Hash": tx['hash']
-                    })
-                    continue
-                    
-                # Recursive step
-                trace_wallet(next_wallet, output_file, depth + 1)
-        
-        page += 1
-        pbar.update(1)
-            
-    pbar.close()
+        # Block timestamp
+        block_num = tx_data.get("blockNumber")
+        timestamp = "Unknown"
+        if block_num:
+            params_block = {"module": "block", "action": "getblockreward", "blockno": int(block_num, 16)}
+            block_info = self._get(params_block).get("result")
+            if block_info and "timeStamp" in block_info:
+                ts = int(block_info["timeStamp"])
+                timestamp = datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
 
-def monitor_wallets(output_file):
-    """Continuously monitors all discovered wallets for new outbound activity."""
-    print("\n" + "="*80)
-    print(" 📡 TRACE COMPLETED. ENTERING LIVE CONTINUOUS MONITORING MODE... ")
-    print(f" Monitoring {len(visited_wallets)} tracked wallets. Press Ctrl+C to stop.")
-    print("="*80 + "\n")
-    
+        val_eth = int(tx_data.get("value", "0"), 16) / 1e18
+
+        from_addr = tx_data.get("from", "").lower()
+        to_addr = tx_data.get("to", "").lower() if tx_data.get("to") else "Contract Creation"
+
+        from_type, from_name = self.classify_address(from_addr)
+        to_type, to_name = self.classify_address(to_addr) if to_addr != "Contract Creation" else ("Contract", "Creation")
+
+        return {
+            "tx_hash": tx_hash,
+            "from": from_addr,
+            "from_type": f"{from_type} ({from_name})",
+            "to": to_addr,
+            "to_type": f"{to_type} ({to_name})",
+            "value_eth": val_eth,
+            "timestamp": timestamp,
+            "block_number": int(block_num, 16) if block_num else None
+        }
+
+    def get_address_transactions(self, address: str) -> List[dict]:
+        """Gets normal transactions for a monitored address."""
+        params = {
+            "module": "account",
+            "action": "txlist",
+            "address": address,
+            "startblock": 0,
+            "endblock": 99999999,
+            "page": 1,
+            "offset": 20,
+            "sort": "desc"
+        }
+        res = self._get(params)
+        if res.get("status") == "1":
+            return res.get("result", [])
+        return []
+
+# ==========================================
+# MAIN TRACING & MONITORING ENGINE
+# ==========================================
+def run_tracker():
+    tracker = EtherscanTracker(ETHERSCAN_API_KEY)
+
+    console.print(Panel.fit("[bold green]Crypto Transaction Flow Tracker & Continuous Monitor[/bold green]", border_style="cyan"))
+
+    # Step 1: Process starting transactions
+    console.print("\n[bold yellow]Phase 1: Initial Hash Inspection & Chain Discovery[/bold yellow]")
+    table = Table(title="Starting Transactions Summary")
+    table.add_column("Tx Hash", style="dim", overflow="fold")
+    table.add_column("From", style="cyan")
+    table.add_column("To Target", style="magenta")
+    table.add_column("Amount (ETH)", justify="right", style="green")
+    table.add_column("Timestamp", style="yellow")
+
+    for tx_hash in STARTING_TX_HASHES:
+        with console.status(f"[bold cyan]Fetching details for {tx_hash[:10]}...[/bold cyan]"):
+            details = tracker.get_transaction_details(tx_hash)
+
+        if details:
+            tracker.seen_tx_hashes.add(tx_hash.lower())
+            tracker.monitored_addresses.add(details["to"].lower())
+
+            table.add_row(
+                details["tx_hash"][:12] + "...",
+                f"{details['from'][:8]}...\n[{details['from_type']}]",
+                f"{details['to'][:8]}...\n[{details['to_type']}]",
+                f"{details['value_eth']:.4f}",
+                details["timestamp"]
+            )
+
+            # Optional Alert on initial discovery
+            notify(
+                "Initial Seed Transaction Discovered",
+                f"Tx: `{tx_hash}`\n"
+                f"From: `{details['from']}` ({details['from_type']})\n"
+                f"To: `{details['to']}` ({details['to_type']})\n"
+                f"Amount: {details['value_eth']} ETH\n"
+                f"Time: {details['timestamp']}"
+            )
+
+    console.print(table)
+    console.print(f"\n[bold green]✓ Added {len(tracker.monitored_addresses)} recipient address(es) to real-time watchlist.[/bold green]")
+
+    # Step 2: Continuous Real-Time Monitoring Loop
+    console.print("\n[bold yellow]Phase 2: Continuous Monitoring Active[/bold yellow] (Press Ctrl+C to stop)\n")
+
+    poll_count = 0
     try:
         while True:
-            new_tx_found = False
-            # Make a static copy of visited_wallets in case new wallets are added dynamically during the loop
-            target_wallets = list(visited_wallets)
-            
-            for wallet in target_wallets:
-                tx_list = fetch_latest_txs(wallet, page=1, offset=10)
-                
-                for tx in tx_list:
-                    # Check for outgoing value transfers not yet processed
-                    if tx["from"].lower() == wallet.lower() and float(tx["value"]) > 0:
-                        if not is_tx_already_logged(tx['hash'], output_file):
-                            new_tx_found = True
-                            ether_value = float(tx["value"]) / 10**18
-                            next_wallet = tx["to"]
-                            tx_time = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(int(tx["timeStamp"])))
-                            
-                            entity_type, entity_name = identify_address_type(next_wallet)
-                            type_flag = f"[{entity_type} - {entity_name}]" if entity_type != "Unknown" else "[Wallet/Contract]"
-                            
-                            print(f"🚨 [NEW TX DETECTED] From {wallet[:8]}... Sent {ether_value:.4f} ETH to {next_wallet} {type_flag} ({tx_time})")
-                            
-                            tx_record = {
-                                "layer": "LIVE",
-                                "timestamp": tx_time,
-                                "tx_hash": tx['hash'],
-                                "from_address": wallet,
-                                "to_address": next_wallet,
-                                "eth_value": ether_value,
-                                "destination_type": entity_type,
-                                "destination_name": entity_name
-                            }
-                            
-                            save_transaction_to_csv(tx_record, output_file)
-                            
-                            if entity_type == "CEX":
-                                print(f"  🛑 Live transaction hit CEX ({entity_name}).")
-                                cex_discoveries.append({
-                                    "CEX Name": entity_name,
-                                    "Address": next_wallet,
-                                    "Timestamp": tx_time,
-                                    "Tx Hash": tx['hash']
-                                })
-                            else:
-                                # Recursively trace the newly discovered branch from the live tx
-                                trace_wallet(next_wallet, output_file, depth=1)
+            poll_count += 1
+            now_str = datetime.datetime.now().strftime("%H:%M:%S")
 
-            if not new_tx_found:
-                # Idle feedback indicator
-                current_time = datetime.now().strftime("%H:%M:%S")
-                print(f"[{current_time}] No new transactions detected. Checking again in {MONITOR_INTERVAL}s...", end="\r")
-                
-            time.sleep(MONITOR_INTERVAL)
+            with console.status(f"[bold cyan]Poll #{poll_count} ({now_str}) | Checking {len(tracker.monitored_addresses)} addresses...[/bold cyan]") as status:
+                for target_address in list(tracker.monitored_addresses):
+                    tx_list = tracker.get_address_transactions(target_address)
+
+                    for tx in tx_list:
+                        tx_h = tx.get("hash", "").lower()
+                        if tx_h in tracker.seen_tx_hashes:
+                            continue
+
+                        tracker.seen_tx_hashes.add(tx_h)
+
+                        # Extract details
+                        val_eth = int(tx.get("value", "0")) / 1e18
+                        from_addr = tx.get("from", "").lower()
+                        to_addr = tx.get("to", "").lower()
+                        ts = int(tx.get("timeStamp", 0))
+                        time_str = datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+
+                        from_type, _ = tracker.classify_address(from_addr)
+                        to_type, _ = tracker.classify_address(to_addr)
+
+                        # Print alert table
+                        event_table = Table(title=f"🚨 NEW TRANSACTION DETECTED - Poll #{poll_count}", border_style="red")
+                        event_table.add_column("Field", style="bold yellow")
+                        event_table.add_column("Value", style="white")
+
+                        event_table.add_row("Tx Hash", tx_h)
+                        event_table.add_row("Monitored Subject", target_address)
+                        event_table.add_row("From", f"{from_addr} [{from_type}]")
+                        event_table.add_row("To", f"{to_addr} [{to_type}]")
+                        event_table.add_row("Amount", f"{val_eth:.6f} ETH")
+                        event_table.add_row("Timestamp", time_str)
+
+                        console.print(event_table)
+
+                        # Add new non-CEX destination addresses to watchlist
+                        if to_addr and to_addr not in tracker.monitored_addresses and "CEX" not in to_type:
+                            tracker.monitored_addresses.add(to_addr)
+                            console.print(f"[bold magenta]➕ Expanded tracking graph to new destination address: {to_addr}[/bold magenta]")
+
+                        # Send notification alert
+                        notify(
+                            "New Transaction Alert!",
+                            f"Monitored Address: `{target_address}`\n"
+                            f"Tx Hash: `{tx_h}`\n"
+                            f"From: `{from_addr}` [{from_type}]\n"
+                            f"To: `{to_addr}` [{to_type}]\n"
+                            f"Amount: {val_eth:.6f} ETH\n"
+                            f"Timestamp: {time_str}"
+                        )
+
+            time.sleep(POLL_INTERVAL_SECONDS)
 
     except KeyboardInterrupt:
-        print("\n\n🛑 Monitoring stopped by user.")
+        console.print("\n[bold red]Monitoring stopped by user.[/bold red]")
 
-# Target pooling wallet discovered via MetaSleuth
-pooling_wallet = "0x220fe14412bca438b3dbc5078e04f802f8f098e7"
-
-# Generate unique run filename
-timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-output_csv_filename = f"crypto_trace_{timestamp_str}.csv"
-
-print(f"Starting secure exhaustive trace on pooling wallet. Saving progress to {output_csv_filename}...")
-
-# Step 1: Run full initial historical trace
-trace_wallet(pooling_wallet, output_file=output_csv_filename, depth=1)
-
-# Step 2: Transition directly into continuous live monitoring
-monitor_wallets(output_file=output_csv_filename)
-
-# --- FINAL EXECUTION SUMMARY ---
-print("\n" + "="*80)
-print("                       FINAL TRACE EXECUTION SUMMARY                     ")
-print("="*80)
-print(f"Total Unique Wallets Analyzed: {len(visited_wallets)}")
-print(f"Total CEX Target Endpoints Reached: {len(cex_discoveries)}")
-print("-"*80)
-
-if cex_discoveries:
-    df_summary = pd.DataFrame(cex_discoveries)
-    df_summary.drop_duplicates(subset=["Address", "Timestamp"], inplace=True)
-    print(df_summary.to_string(index=False))
-else:
-    print("No prominent Exchange (CEX) deposit endpoints or hot-wallets were triggered during this run.")
-print("="*80)
+if __name__ == "__main__":
+    run_tracker()
