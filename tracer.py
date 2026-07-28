@@ -9,6 +9,7 @@ from tqdm import tqdm  # Ensure this is installed: pip install tqdm
 # Configuration
 API_KEY = "ZFEQKMEBZ6T7NERFNZHEFM8NIE46HRHZ9A"
 BASE_URL = "https://api.etherscan.io/v2/api"
+MONITOR_INTERVAL = 15  # Seconds between monitoring checks
 
 # Expanded list of prominent CEX Hot Wallets and Deposit Contracts
 KNOWN_ENTITIES = {
@@ -47,6 +48,7 @@ KNOWN_ENTITIES = {
 # Sets and lists to store execution summaries globally
 visited_wallets = set()
 cex_discoveries = []
+logged_tx_hashes = set()
 
 def identify_address_type(address):
     if not address:
@@ -56,12 +58,52 @@ def identify_address_type(address):
         return KNOWN_ENTITIES[addr_lower]["type"], KNOWN_ENTITIES[addr_lower]["name"]
     return "Unknown", "Wallet/Contract"
 
+def is_tx_already_logged(tx_hash, file_path):
+    """Check if the transaction hash is already saved in the CSV or in memory."""
+    if tx_hash in logged_tx_hashes:
+        return True
+    if os.path.isfile(file_path):
+        try:
+            df = pd.read_csv(file_path, usecols=['tx_hash'])
+            if tx_hash in df['tx_hash'].values:
+                logged_tx_hashes.add(tx_hash)
+                return True
+        except Exception:
+            pass
+    return False
+
 def save_transaction_to_csv(tx_data, file_path):
     df_new = pd.DataFrame([tx_data])
     if not os.path.isfile(file_path):
         df_new.to_csv(file_path, index=False)
     else:
         df_new.to_csv(file_path, mode='a', header=False, index=False)
+    logged_tx_hashes.add(tx_data['tx_hash'])
+
+def fetch_latest_txs(wallet_address, page=1, offset=20):
+    """Fetch transactions for a given wallet address."""
+    params = {
+        "chainid": "1",
+        "module": "account",
+        "action": "txlist",
+        "address": wallet_address,
+        "startblock": 0,
+        "endblock": 99999999,
+        "page": page,
+        "offset": offset,
+        "sort": "desc",
+        "apikey": API_KEY
+    }
+    try:
+        time.sleep(0.2)
+        response = requests.get(BASE_URL, params=params, impersonate="chrome")
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("status") == "1" and data.get("message") == "OK":
+                return data.get("result", [])
+    except Exception as e:
+        print(f"❌ API Request error: {e}")
+    return []
 
 def trace_wallet(wallet_address, output_file, depth=1):
     # Normalize address to avoid case mismatch duplicate loops
@@ -77,91 +119,132 @@ def trace_wallet(wallet_address, output_file, depth=1):
     has_more_tx = True
     found_outbound = False
     
-    # Initialize a clean progress bar for pagination scanning
     pbar = tqdm(desc=f"Layer {depth} API Pages", unit="page", leave=False)
     
     while has_more_tx:
-        params = {
-            "chainid": "1",
-            "module": "account",
-            "action": "txlist",
-            "address": wallet_address,
-            "startblock": 0,
-            "endblock": 99999999, 
-            "page": page,
-            "offset": offset, 
-            "sort": "desc", 
-            "apikey": API_KEY
-        }
+        tx_list = fetch_latest_txs(wallet_address, page=page, offset=offset)
         
-        try:
-            time.sleep(0.2) 
-            response = requests.get(BASE_URL, params=params, impersonate="chrome")
+        if not tx_list:
+            has_more_tx = False
+            if not found_outbound and page == 1:
+                tqdm.write("  " * depth + "🛑 No outgoing value transfers found from this address.")
+            break
             
-            if response.status_code != 200:
-                print("  " * depth + f"⚠️ Server rejected connection. Status Code: {response.status_code}")
-                break
-                
-            data = response.json()
-            
-            if data.get("status") == "1" and data.get("message") == "OK":
-                tx_list = data["result"]
-                
-                if len(tx_list) < offset:
-                    has_more_tx = False
-                
-                for tx in tx_list:
-                    if tx["from"].lower() == wallet_address.lower() and float(tx["value"]) > 0:
-                        found_outbound = True
-                        ether_value = float(tx["value"]) / 10**18
-                        next_wallet = tx["to"]
-                        tx_time = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(int(tx["timeStamp"])))
-                        
-                        entity_type, entity_name = identify_address_type(next_wallet)
-                        type_flag = f"[{entity_type} - {entity_name}]" if entity_type != "Unknown" else "[Wallet/Contract]"
-                        
-                        tqdm.write("  " * depth + f"➡️ Sent {ether_value:.4f} ETH to {next_wallet} {type_flag} ({tx_time})")
-                        
-                        tx_record = {
-                            "layer": depth,
-                            "timestamp": tx_time,
-                            "tx_hash": tx['hash'],
-                            "from_address": wallet_address,
-                            "to_address": next_wallet,
-                            "eth_value": ether_value,
-                            "destination_type": entity_type,
-                            "destination_name": entity_name
-                        }
-                        
-                        save_transaction_to_csv(tx_record, output_file)
-                        
-                        if entity_type == "CEX":
-                            tqdm.write("  " * depth + f"🛑 Flow hit a CEX ({entity_name}). Stopping branch exploration.")
-                            # Store unique CEX discoveries for final visual display
-                            cex_discoveries.append({
-                                "CEX Name": entity_name,
-                                "Address": next_wallet,
-                                "Timestamp": tx_time,
-                                "Tx Hash": tx['hash']
-                            })
-                            continue
-                            
-                        # Recursive step without artificial max_depth boundaries
-                        trace_wallet(next_wallet, output_file, depth + 1)
-                
-                page += 1
-                pbar.update(1)
-                
-            else:
-                has_more_tx = False
-                if not found_outbound and page == 1:
-                    tqdm.write("  " * depth + "🛑 No outgoing value transfers found from this address.")
-                
-        except Exception as e:
-            tqdm.write("  " * depth + f"❌ Execution error: {e}")
+        if len(tx_list) < offset:
             has_more_tx = False
             
+        for tx in tx_list:
+            if tx["from"].lower() == wallet_address.lower() and float(tx["value"]) > 0:
+                found_outbound = True
+                
+                # Skip if already processed
+                if is_tx_already_logged(tx['hash'], output_file):
+                    continue
+
+                ether_value = float(tx["value"]) / 10**18
+                next_wallet = tx["to"]
+                tx_time = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(int(tx["timeStamp"])))
+                
+                entity_type, entity_name = identify_address_type(next_wallet)
+                type_flag = f"[{entity_type} - {entity_name}]" if entity_type != "Unknown" else "[Wallet/Contract]"
+                
+                tqdm.write("  " * depth + f"➡️ Sent {ether_value:.4f} ETH to {next_wallet} {type_flag} ({tx_time})")
+                
+                tx_record = {
+                    "layer": depth,
+                    "timestamp": tx_time,
+                    "tx_hash": tx['hash'],
+                    "from_address": wallet_address,
+                    "to_address": next_wallet,
+                    "eth_value": ether_value,
+                    "destination_type": entity_type,
+                    "destination_name": entity_name
+                }
+                
+                save_transaction_to_csv(tx_record, output_file)
+                
+                if entity_type == "CEX":
+                    tqdm.write("  " * depth + f"🛑 Flow hit a CEX ({entity_name}). Stopping branch exploration.")
+                    cex_discoveries.append({
+                        "CEX Name": entity_name,
+                        "Address": next_wallet,
+                        "Timestamp": tx_time,
+                        "Tx Hash": tx['hash']
+                    })
+                    continue
+                    
+                # Recursive step
+                trace_wallet(next_wallet, output_file, depth + 1)
+        
+        page += 1
+        pbar.update(1)
+            
     pbar.close()
+
+def monitor_wallets(output_file):
+    """Continuously monitors all discovered wallets for new outbound activity."""
+    print("\n" + "="*80)
+    print(" 📡 TRACE COMPLETED. ENTERING LIVE CONTINUOUS MONITORING MODE... ")
+    print(f" Monitoring {len(visited_wallets)} tracked wallets. Press Ctrl+C to stop.")
+    print("="*80 + "\n")
+    
+    try:
+        while True:
+            new_tx_found = False
+            # Make a static copy of visited_wallets in case new wallets are added dynamically during the loop
+            target_wallets = list(visited_wallets)
+            
+            for wallet in target_wallets:
+                tx_list = fetch_latest_txs(wallet, page=1, offset=10)
+                
+                for tx in tx_list:
+                    # Check for outgoing value transfers not yet processed
+                    if tx["from"].lower() == wallet.lower() and float(tx["value"]) > 0:
+                        if not is_tx_already_logged(tx['hash'], output_file):
+                            new_tx_found = True
+                            ether_value = float(tx["value"]) / 10**18
+                            next_wallet = tx["to"]
+                            tx_time = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(int(tx["timeStamp"])))
+                            
+                            entity_type, entity_name = identify_address_type(next_wallet)
+                            type_flag = f"[{entity_type} - {entity_name}]" if entity_type != "Unknown" else "[Wallet/Contract]"
+                            
+                            print(f"🚨 [NEW TX DETECTED] From {wallet[:8]}... Sent {ether_value:.4f} ETH to {next_wallet} {type_flag} ({tx_time})")
+                            
+                            tx_record = {
+                                "layer": "LIVE",
+                                "timestamp": tx_time,
+                                "tx_hash": tx['hash'],
+                                "from_address": wallet,
+                                "to_address": next_wallet,
+                                "eth_value": ether_value,
+                                "destination_type": entity_type,
+                                "destination_name": entity_name
+                            }
+                            
+                            save_transaction_to_csv(tx_record, output_file)
+                            
+                            if entity_type == "CEX":
+                                print(f"  🛑 Live transaction hit CEX ({entity_name}).")
+                                cex_discoveries.append({
+                                    "CEX Name": entity_name,
+                                    "Address": next_wallet,
+                                    "Timestamp": tx_time,
+                                    "Tx Hash": tx['hash']
+                                })
+                            else:
+                                # Recursively trace the newly discovered branch from the live tx
+                                trace_wallet(next_wallet, output_file, depth=1)
+
+            if not new_tx_found:
+                # Idle feedback indicator
+                current_time = datetime.now().strftime("%H:%M:%S")
+                print(f"[{current_time}] No new transactions detected. Checking again in {MONITOR_INTERVAL}s...", end="\r")
+                
+            time.sleep(MONITOR_INTERVAL)
+
+    except KeyboardInterrupt:
+        print("\n\n🛑 Monitoring stopped by user.")
 
 # Target pooling wallet discovered via MetaSleuth
 pooling_wallet = "0x220fe14412bca438b3dbc5078e04f802f8f098e7"
@@ -171,11 +254,16 @@ timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
 output_csv_filename = f"crypto_trace_{timestamp_str}.csv"
 
 print(f"Starting secure exhaustive trace on pooling wallet. Saving progress to {output_csv_filename}...")
+
+# Step 1: Run full initial historical trace
 trace_wallet(pooling_wallet, output_file=output_csv_filename, depth=1)
+
+# Step 2: Transition directly into continuous live monitoring
+monitor_wallets(output_file=output_csv_filename)
 
 # --- FINAL EXECUTION SUMMARY ---
 print("\n" + "="*80)
-print("                       FINAL TRACE EXECUTION SUMMARY                    ")
+print("                       FINAL TRACE EXECUTION SUMMARY                     ")
 print("="*80)
 print(f"Total Unique Wallets Analyzed: {len(visited_wallets)}")
 print(f"Total CEX Target Endpoints Reached: {len(cex_discoveries)}")
@@ -183,7 +271,6 @@ print("-"*80)
 
 if cex_discoveries:
     df_summary = pd.DataFrame(cex_discoveries)
-    # Deduplicate matching paths if funds hit the same CEX cluster address multiple times
     df_summary.drop_duplicates(subset=["Address", "Timestamp"], inplace=True)
     print(df_summary.to_string(index=False))
 else:
