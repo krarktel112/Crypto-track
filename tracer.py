@@ -2,6 +2,8 @@ import sys
 import time
 import requests
 import smtplib
+import csv
+import os
 from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -11,15 +13,16 @@ from email.mime.multipart import MIMEMultipart
 # ==========================================
 ETHERSCAN_API_KEY = "ZFEQKMEBZ6T7NERFNZHEFM8NIE46HRHZ9A"
 TARGET_COMPARE_HASH = "0x8274d085c74164f1f2a8e67b0ffeccd95a3c74e51c43d289de1a535d9bdb9ae0"
+CSV_FILE_NAME = "tracked_crypto_log.csv"
 
-# Telegram Configuration (Set enabled=True and fill credentials if desired)
+# Telegram Configuration
 TELEGRAM_CONFIG = {
     "enabled": False,
     "bot_token": "YOUR_TELEGRAM_BOT_TOKEN",
     "chat_id": "YOUR_TELEGRAM_CHAT_ID"
 }
 
-# Email Configuration (Set enabled=True and fill credentials if desired)
+# Email Configuration
 EMAIL_CONFIG = {
     "enabled": False,
     "smtp_server": "smtp.gmail.com",
@@ -71,12 +74,10 @@ TRACKED_ITEMS = [
 
 # Database of notable DEX Routers & CEX Deposit/Hot Wallets
 KNOWN_ENTITIES = {
-    # DEX Routers
     "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": "DEX (Uniswap V2 Router)",
     "0xe592427a0aece92de3edee1f18e0157c05861564": "DEX (Uniswap V3 Router)",
     "0x1111111254fb6c44bac0bed2854e76f90643097d": "DEX (1inch Router)",
     "0xd9e1ce17f2641f24ae83637ab66a2cca9c378804": "DEX (Sushiswap Router)",
-    # Common CEX Wallets
     "0x28c6c06298d514db089934071355e5743bf21d60": "CEX (Binance Hot Wallet 14)",
     "0x21a31ee1afc51d94c2efccaa2092ad1028285549": "CEX (Binance Hot Wallet)",
     "0x70faa28a6b8d6829a4b1e629c2a47542ccc35070": "CEX (Coinbase)",
@@ -133,7 +134,6 @@ def classify_address(address: str, chain: str) -> str:
         return KNOWN_ENTITIES[addr_lower]
     
     if chain == "EVM":
-        # Check if address is a Smart Contract on Ethereum
         url = f"https://api.etherscan.io/api?module=proxy&action=eth_getCode&address={address}&apikey={ETHERSCAN_API_KEY}"
         try:
             res = requests.get(url, timeout=5).json()
@@ -146,7 +146,7 @@ def classify_address(address: str, chain: str) -> str:
             
     elif chain == "BTC":
         if address.startswith("bc1p"):
-            return "BTC Taproot Address (User/Service)"
+            return "BTC Taproot Address"
         elif address.startswith("bc1q"):
             return "BTC Native SegWit Address"
         elif address.startswith("1") or address.startswith("3"):
@@ -163,11 +163,9 @@ def fetch_evm_transaction(tx_hash: str):
         if not result:
             return None
         
-        # Calculate Value in ETH
         val_wei = int(result.get("value", "0x0"), 16)
         val_eth = val_wei / 10**18
         
-        # Get timestamp by block
         block_num = result.get("blockNumber")
         timestamp = "Pending"
         if block_num:
@@ -177,16 +175,13 @@ def fetch_evm_transaction(tx_hash: str):
             if raw_ts:
                 timestamp = datetime.fromtimestamp(int(raw_ts)).strftime('%Y-%m-%d %H:%M:%S UTC')
 
-        from_addr = result.get("from")
-        to_addr = result.get("to")
-
         return {
             "tx_hash": tx_hash,
             "chain": "EVM",
-            "from": from_addr,
-            "from_type": classify_address(from_addr, "EVM"),
-            "to": to_addr,
-            "to_type": classify_address(to_addr, "EVM"),
+            "from": result.get("from"),
+            "from_type": classify_address(result.get("from"), "EVM"),
+            "to": result.get("to"),
+            "to_type": classify_address(result.get("to"), "EVM"),
             "value": f"{val_eth:.6f} ETH",
             "timestamp": timestamp,
             "block": block_num
@@ -207,23 +202,19 @@ def fetch_btc_transaction(tx_hash: str):
         block_time = status.get("block_time")
         timestamp = datetime.fromtimestamp(block_time).strftime('%Y-%m-%d %H:%M:%S UTC') if block_time else "Unconfirmed"
         
-        # Calculate total output amount in BTC
         total_sats = sum([out.get("value", 0) for out in data.get("vout", [])])
         total_btc = total_sats / 10**8
 
         inputs = [inp.get("prevout", {}).get("scriptpubkey_address") for inp in data.get("vin", []) if inp.get("prevout")]
         outputs = [out.get("scriptpubkey_address") for out in data.get("vout", []) if out.get("scriptpubkey_address")]
 
-        from_addr = inputs[0] if inputs else "Unknown"
-        to_addr = outputs[0] if outputs else "Unknown"
-
         return {
             "tx_hash": tx_hash,
             "chain": "BTC",
-            "from": from_addr,
-            "from_type": classify_address(from_addr, "BTC"),
-            "to": to_addr,
-            "to_type": classify_address(to_addr, "BTC"),
+            "from": inputs[0] if inputs else "Unknown",
+            "from_type": classify_address(inputs[0] if inputs else None, "BTC"),
+            "to": outputs[0] if outputs else "Unknown",
+            "to_type": classify_address(outputs[0] if outputs else None, "BTC"),
             "value": f"{total_btc:.6f} BTC",
             "timestamp": timestamp,
             "block": status.get("block_height", "Unconfirmed")
@@ -232,10 +223,28 @@ def fetch_btc_transaction(tx_hash: str):
         return {"error": str(e)}
 
 # ==========================================
+# CSV WRITER UTILITY
+# ==========================================
+def append_to_csv(data_row: list):
+    """Appends data directly to CSV file and flushes instantly."""
+    file_exists = os.path.isfile(CSV_FILE_NAME)
+    
+    with open(CSV_FILE_NAME, mode='a', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        # Write headers if file was newly created
+        if not file_exists:
+            writer.writerow([
+                "Scan_Timestamp", "Chain", "Tx_Hash", "OnChain_Timestamp",
+                "Value", "Expected_Amount", "Sender", "Sender_Type",
+                "Recipient", "Recipient_Type", "Target_Match"
+            ])
+        writer.writerow(data_row)
+        f.flush()  # Forces immediate save to disk
+
+# ==========================================
 # MONITORING & EXECUTION ENGINE
 # ==========================================
 def print_status_bar(iteration, total, prefix='', suffix='', length=30):
-    """Displays terminal progress bar status."""
     percent = f"{100 * (iteration / float(total)):.1f}"
     filled_length = int(length * iteration // total)
     bar = '█' * filled_length + '-' * (length - filled_length)
@@ -244,8 +253,9 @@ def print_status_bar(iteration, total, prefix='', suffix='', length=30):
 
 def run_trace_and_monitor():
     print("\n=======================================================")
-    print("      CRYPTO TRANSACTION TRACER & CONTINUOUS MONITOR    ")
+    print("  CRYPTO TRANSACTION TRACER & REAL-TIME CSV LOGGING    ")
     print("=======================================================\n")
+    print(f"[*] Saving real-time logs to: {CSV_FILE_NAME}")
     print(f"[*] Target Reference Hash to Match:\n    {TARGET_COMPARE_HASH}\n")
     
     seen_transactions = set()
@@ -266,7 +276,6 @@ def run_trace_and_monitor():
                 if not tx_hash:
                     continue
                 
-                # Direct comparison with target hash
                 is_target_match = (tx_hash.lower() == TARGET_COMPARE_HASH.lower())
                 
                 # Fetch Transaction Data
@@ -278,12 +287,27 @@ def run_trace_and_monitor():
                 if not tx_data or "error" in tx_data:
                     continue
 
-                # Format Output Log
+                # Append record directly to the CSV file
+                csv_row = [
+                    timestamp_now,
+                    tx_data['chain'],
+                    tx_hash,
+                    tx_data['timestamp'],
+                    tx_data['value'],
+                    item['expected_amount'],
+                    tx_data['from'],
+                    tx_data['from_type'],
+                    tx_data['to'],
+                    tx_data['to_type'],
+                    "YES" if is_target_match else "NO"
+                ]
+                append_to_csv(csv_row)
+
+                # Format Terminal Output
                 log_output = (
                     f"\n\n[+] Hash: {tx_hash}\n"
                     f"    - Chain: {tx_data['chain']}\n"
                     f"    - Timestamp: {tx_data['timestamp']}\n"
-                    f"    - Expected Input Amount: {item['expected_amount']}\n"
                     f"    - On-Chain Value: {tx_data['value']}\n"
                     f"    - Sender ({tx_data['from_type']}): {tx_data['from']}\n"
                     f"    - Recipient ({tx_data['to_type']}): {tx_data['to']}\n"
@@ -291,7 +315,7 @@ def run_trace_and_monitor():
                 )
                 print(log_output)
 
-                # Check if new transaction observed
+                # Send notifications if new target match is discovered
                 if tx_hash not in seen_transactions:
                     seen_transactions.add(tx_hash)
                     if is_target_match:
@@ -300,7 +324,7 @@ def run_trace_and_monitor():
                             f"Matched Target Tx: {tx_hash}\nAmount: {tx_data['value']}\nTimestamp: {tx_data['timestamp']}"
                         )
             
-            print(f"\n\n[✓] Cycle #{poll_count} complete. Waiting 30 seconds for continuous monitoring (Press Ctrl+C to stop)...")
+            print(f"\n\n[✓] Cycle #{poll_count} complete. File updated. Waiting 30s...")
             time.sleep(30)
             
     except KeyboardInterrupt:
