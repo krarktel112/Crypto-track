@@ -1,566 +1,310 @@
-import os
-import csv
+import sys
 import time
-import smtplib
-from datetime import datetime, timezone
-from email.mime.text import MIMEText
 import requests
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
-from rich.prompt import Confirm
+import smtplib
+from datetime import datetime
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
-# ==============================================================================
-# CONFIGURATION
-# ==============================================================================
-
+# ==========================================
+# CONFIGURATION & KNOWN ADDRESSES
+# ==========================================
 ETHERSCAN_API_KEY = "ZFEQKMEBZ6T7NERFNZHEFM8NIE46HRHZ9A"
-ETHERSCAN_BASE_URL = "https://api.etherscan.io/api"
-CSV_FILE_PATH = "crypto_trace_log.csv"
+TARGET_COMPARE_HASH = "0x8274d085c74164f1f2a8e67b0ffeccd95a3c74e51c43d289de1a535d9bdb9ae0"
 
-STARTING_TXS = [
-    "0x8274d085c74164f1f2a8e67b0ffeccd95a3c74e51c43d289de1a535d9bdb9ae0",
-    "0x447ed6764b719bc3921f699e836a12d1394f6390d423a1c71c3e04cda731f217"
-]
-
-# --- NOTIFICATION CONFIGURATION ---
-ENABLE_TELEGRAM = False
-TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
-TELEGRAM_CHAT_ID = "YOUR_TELEGRAM_CHAT_ID"
-
-ENABLE_EMAIL = False
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
-SENDER_EMAIL = "your_email@gmail.com"
-SENDER_PASSWORD = "your_app_password"
-RECIPIENT_EMAIL = "recipient@example.com"
-
-# --- KNOWN ADDRESS DIRECTORY (CEX & DEX) ---
-KNOWN_CEX_ADDRESSES = {
-    "0x28c6c06298d514db089934071355e5743bf21d60": "Binance 14",
-    "0x21a31ee1afc51d94c2efccaa3c09400018200614": "Binance 15",
-    "0xdfd5293d8e347dfe59e90efd55b2956a1343963d": "Binance 16",
-    "0x5033290db7efb663663613a077465f1a54016a24": "Binance 17",
-    "0x71660c4005ba85c37ccec55d0c4493e66fe775d3": "Coinbase Hot Wallet 1",
-    "0xa097a64312f473644b004f2fc1231fdf76b7e704": "Coinbase Hot Wallet 2",
-    "0xda9dfa130df4de4673b89022ee50ff26f6ea73cf": "Kraken Hot Wallet 1",
-    "0x2910043131f846f016d251642875150a00d11122": "OKX Hot Wallet",
-    "0x0d0707963952f2a77299380901e12762a45a643b": "Bybit Hot Wallet",
+# Telegram Configuration (Set enabled=True and fill credentials if desired)
+TELEGRAM_CONFIG = {
+    "enabled": False,
+    "bot_token": "YOUR_TELEGRAM_BOT_TOKEN",
+    "chat_id": "YOUR_TELEGRAM_CHAT_ID"
 }
 
-KNOWN_DEX_ROUTERS = {
-    "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": "Uniswap v2 Router",
-    "0xe592427a0aece92de3edee1f18e0157c05861564": "Uniswap v3 Router",
-    "0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45": "Uniswap Universal Router",
-    "0xd9e1ce17f2641f24ae83637ab66a2cca9c378804": "SushiSwap Router",
-    "0x1111111254fb6c44bac0bed2854e76f90643097d": "1inch v5 Router",
-    "0xdef1c0dedd75f123304367564d3f3f338d3bead2": "0x Exchange Proxy",
-    "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad": "Uniswap Universal Router 2",
+# Email Configuration (Set enabled=True and fill credentials if desired)
+EMAIL_CONFIG = {
+    "enabled": False,
+    "smtp_server": "smtp.gmail.com",
+    "smtp_port": 587,
+    "sender_email": "your_email@gmail.com",
+    "sender_password": "your_app_password",
+    "recipient_email": "recipient@gmail.com"
 }
 
-CSV_HEADERS = [
-    "timestamp",
-    "tx_hash",
-    "from",
-    "from_type",
-    "to",
-    "to_type",
-    "to_label",
-    "amount_eth",
-    "block"
+# Input Data Set provided for tracing
+TRACKED_ITEMS = [
+    {
+        "type": "EVM",
+        "tx_hash": "0x447ed6764b719bc3921f699e836a12d1394f6390d423a1c71c3e04cda731f217",
+        "expected_amount": "1505$",
+        "address": "0xb591b2a6382025d8a39c2ad8dfd4a88d422e4f14"
+    },
+    {
+        "type": "BTC",
+        "tx_hash": "c35f8dd5898292dadac3251f479fe1b283028c7398f73587ae7cd635893b6f4d",
+        "expected_amount": "403.35",
+        "address": "bc1p22p5ywpdc4ptglryn4d8j2tzwg00ml5qd9aqaarnjekqpzj5rl3sqs93w9"
+    },
+    {
+        "type": "BTC",
+        "tx_hash": "1aa96cd4747e6f2ec09a44c904182582038c55c9bbcc9416040a6e029bc2f42e",
+        "expected_amount": "112.66",
+        "address": "1Cm8gRoe3jCi9rBHGLwVHaiP7xtuZ2s4Y"
+    },
+    {
+        "type": "BTC",
+        "tx_hash": "ab490aa4d9c561db81925db4aeef6a7774ffe56f4ef65219f6a8eaacaaf2e7ca",
+        "expected_amount": "1001",
+        "address": "1EdFX33jg2LQhZMFM381Rx8bcBhEHzfwT"
+    },
+    {
+        "type": "BTC",
+        "tx_hash": "9dfad5cc35b6a3adcaa573749164e2eb8ba90b1011c7d1f7a4316512d3c0b3d8",
+        "expected_amount": "N/A",
+        "address": "bc1pzeupdkxtv2v0p86nyzugdzsv20fyl8v8t60umxnxfvzrrh2kdpws796r0d"
+    },
+    {
+        "type": "EVM",
+        "tx_hash": None,
+        "expected_amount": None,
+        "address": "0x675150eeec3cffa64d92d5d6ab5ab4cd4ef70633"
+    }
 ]
 
-console = Console()
+# Database of notable DEX Routers & CEX Deposit/Hot Wallets
+KNOWN_ENTITIES = {
+    # DEX Routers
+    "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": "DEX (Uniswap V2 Router)",
+    "0xe592427a0aece92de3edee1f18e0157c05861564": "DEX (Uniswap V3 Router)",
+    "0x1111111254fb6c44bac0bed2854e76f90643097d": "DEX (1inch Router)",
+    "0xd9e1ce17f2641f24ae83637ab66a2cca9c378804": "DEX (Sushiswap Router)",
+    # Common CEX Wallets
+    "0x28c6c06298d514db089934071355e5743bf21d60": "CEX (Binance Hot Wallet 14)",
+    "0x21a31ee1afc51d94c2efccaa2092ad1028285549": "CEX (Binance Hot Wallet)",
+    "0x70faa28a6b8d6829a4b1e629c2a47542ccc35070": "CEX (Coinbase)",
+    "0xa9d1e08c7793af67e9d92fe308d5697fb81d3e43": "CEX (Coinbase 10)",
+}
 
-# ==============================================================================
+# ==========================================
 # NOTIFICATION ENGINE
-# ==============================================================================
-
+# ==========================================
 def send_telegram_alert(message: str):
-    if not ENABLE_TELEGRAM:
+    if not TELEGRAM_CONFIG["enabled"]:
         return
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "Markdown"}
+    url = f"https://api.telegram.org/bot{TELEGRAM_CONFIG['bot_token']}/sendMessage"
+    payload = {"chat_id": TELEGRAM_CONFIG["chat_id"], "text": message, "parse_mode": "Markdown"}
     try:
-        response = requests.post(url, json=payload, timeout=10)
-        response.raise_for_status()
+        requests.post(url, json=payload, timeout=5)
     except Exception as e:
-        console.print(f"[bold red]Failed to send Telegram alert:[/bold red] {e}")
+        print(f"\n[!] Failed to send Telegram alert: {e}")
 
 def send_email_alert(subject: str, message: str):
-    if not ENABLE_EMAIL:
+    if not EMAIL_CONFIG["enabled"]:
         return
-    msg = MIMEText(message)
-    msg["Subject"] = subject
-    msg["From"] = SENDER_EMAIL
-    msg["To"] = RECIPIENT_EMAIL
-
     try:
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SENDER_EMAIL, SENDER_PASSWORD)
-            server.sendmail(SENDER_EMAIL, RECIPIENT_EMAIL, msg.as_string())
+        msg = MIMEMultipart()
+        msg["From"] = EMAIL_CONFIG["sender_email"]
+        msg["To"] = EMAIL_CONFIG["recipient_email"]
+        msg["Subject"] = subject
+        msg.attach(MIMEText(message, "plain"))
+
+        server = smtplib.SMTP(EMAIL_CONFIG["smtp_server"], EMAIL_CONFIG["smtp_port"])
+        server.starttls()
+        server.login(EMAIL_CONFIG["sender_email"], EMAIL_CONFIG["sender_password"])
+        server.sendmail(EMAIL_CONFIG["sender_email"], EMAIL_CONFIG["recipient_email"], msg.as_string())
+        server.quit()
     except Exception as e:
-        console.print(f"[bold red]Failed to send Email alert:[/bold red] {e}")
+        print(f"\n[!] Failed to send Email alert: {e}")
 
-def trigger_alerts(event_title: str, details: str):
-    text = f"🚨 *Crypto Trace Alert: {event_title}*\n\n{details}"
-    send_telegram_alert(text)
-    send_email_alert(f"Crypto Trace Alert: {event_title}", details)
+def notify_user(title: str, details: str):
+    full_msg = f"🚨 *{title}*\n\n{details}"
+    print(f"\n[ALERT SENT] {title}")
+    send_telegram_alert(full_msg)
+    send_email_alert(title, details)
 
-# ==============================================================================
-# BLOCKCHAIN ANALYZER & CONTINUOUS CSV LOGGING
-# ==============================================================================
-
-class CryptoTracer:
-    def __init__(self, api_key: str, csv_filepath: str = CSV_FILE_PATH):
-        self.api_key = api_key
-        self.csv_filepath = csv_filepath
-        self.monitored_addresses = set()
-        self.processed_txs = set()
-        self.trace_history = []
-        self._ensure_csv_header()
-
-    def _ensure_csv_header(self):
-        """Creates the CSV file with column headers if it does not exist yet."""
-        if not os.path.exists(self.csv_filepath):
-            try:
-                with open(self.csv_filepath, mode="w", newline="", encoding="utf-8") as f:
-                    writer = csv.writer(f)
-                    writer.writerow(CSV_HEADERS)
-            except Exception as e:
-                console.print(f"[bold red]Failed to initialize CSV file {self.csv_filepath}: {e}[/bold red]")
-
-    def append_to_csv(self, record: dict):
-        """Appends a single transaction record to the CSV file immediately."""
+# ==========================================
+# CLASSIFICATION & API TRACING
+# ==========================================
+def classify_address(address: str, chain: str) -> str:
+    """Identifies if an address is a CEX, DEX, or standard user wallet (EOA)."""
+    if not address:
+        return "Unknown"
+    
+    addr_lower = address.lower()
+    if addr_lower in KNOWN_ENTITIES:
+        return KNOWN_ENTITIES[addr_lower]
+    
+    if chain == "EVM":
+        # Check if address is a Smart Contract on Ethereum
+        url = f"https://api.etherscan.io/api?module=proxy&action=eth_getCode&address={address}&apikey={ETHERSCAN_API_KEY}"
         try:
-            with open(self.csv_filepath, mode="a", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow([
-                    record.get("timestamp"),
-                    record.get("tx_hash"),
-                    record.get("from"),
-                    record.get("from_type", {}).get("type", "Unknown"),
-                    record.get("to"),
-                    record.get("to_type", {}).get("type", "Unknown"),
-                    record.get("to_type", {}).get("label", "N/A"),
-                    record.get("amount_eth"),
-                    record.get("block")
-                ])
-                f.flush()
-        except Exception as e:
-            console.print(f"[bold red]Failed to append record to CSV: {e}[/bold red]")
-
-    def load_state_from_csv(self) -> bool:
-        """Reads existing CSV log on startup to avoid processing duplicates."""
-        if not os.path.exists(self.csv_filepath):
-            return False
-
-        try:
-            with open(self.csv_filepath, mode="r", newline="", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                count = 0
-                for row in reader:
-                    tx_hash = row.get("tx_hash")
-                    if not tx_hash:
-                        continue
-                    
-                    self.processed_txs.add(tx_hash)
-                    
-                    to_addr = row.get("to", "")
-                    to_type = row.get("to_type", "EOA")
-                    to_label = row.get("to_label", "External Wallet")
-                    from_addr = row.get("from", "")
-                    from_type = row.get("from_type", "EOA")
-
-                    rec = {
-                        "timestamp": row.get("timestamp"),
-                        "tx_hash": tx_hash,
-                        "from": from_addr,
-                        "from_type": {"type": from_type, "label": "External Wallet"},
-                        "to": to_addr,
-                        "to_type": {"type": to_type, "label": to_label},
-                        "amount_eth": float(row.get("amount_eth", 0.0)),
-                        "block": row.get("block")
-                    }
-                    self.trace_history.append(rec)
-                    
-                    if to_addr and to_type in ["EOA", "Contract/DEX"]:
-                        self.monitored_addresses.add(to_addr.lower())
-
-                    count += 1
-
-            if count > 0:
-                console.print(f"[bold green]📂 Loaded {count} prior transaction(s) from {self.csv_filepath}[/bold green]\n")
-                return True
-        except Exception as e:
-            console.print(f"[bold red]Error reading existing CSV {self.csv_filepath}: {e}[/bold red]")
-        return False
-
-    def classify_address(self, address: str) -> dict:
-        addr_lower = address.lower()
-        if addr_lower in KNOWN_CEX_ADDRESSES:
-            return {"type": "CEX", "label": KNOWN_CEX_ADDRESSES[addr_lower]}
-        if addr_lower in KNOWN_DEX_ROUTERS:
-            return {"type": "DEX", "label": KNOWN_DEX_ROUTERS[addr_lower]}
-        
-        params = {
-            "module": "contract",
-            "action": "getabi",
-            "address": address,
-            "apikey": self.api_key
-        }
-        try:
-            res = requests.get(ETHERSCAN_BASE_URL, params=params, timeout=10).json()
-            if res.get("status") == "1":
-                return {"type": "Contract/DEX", "label": "Smart Contract"}
+            res = requests.get(url, timeout=5).json()
+            code = res.get("result", "0x")
+            if code != "0x" and len(code) > 2:
+                return "DEX / Smart Contract"
+            return "CEX Deposit Wallet or Standard User EOA"
         except Exception:
-            pass
+            return "EOA / Unclassified"
+            
+    elif chain == "BTC":
+        if address.startswith("bc1p"):
+            return "BTC Taproot Address (User/Service)"
+        elif address.startswith("bc1q"):
+            return "BTC Native SegWit Address"
+        elif address.startswith("1") or address.startswith("3"):
+            return "BTC Legacy Address"
+    
+    return "Standard EOA Wallet"
 
-        return {"type": "EOA", "label": "External Wallet"}
-
-    def get_tx_details(self, tx_hash: str) -> dict:
-        params = {
-            "module": "proxy",
-            "action": "eth_getTransactionByHash",
-            "txhash": tx_hash,
-            "apikey": self.api_key
-        }
-        try:
-            res = requests.get(ETHERSCAN_BASE_URL, params=params, timeout=10).json()
-        except Exception as e:
-            console.print(f"[bold red]HTTP Error for {tx_hash[:10]}: {e}[/bold red]")
-            return None
-
+def fetch_evm_transaction(tx_hash: str):
+    """Fetches details for an Ethereum transaction."""
+    url = f"https://api.etherscan.io/api?module=proxy&action=eth_getTransactionByHash&txhash={tx_hash}&apikey={ETHERSCAN_API_KEY}"
+    try:
+        res = requests.get(url, timeout=10).json()
         result = res.get("result")
-        if not result or not isinstance(result, dict):
-            error_msg = result if isinstance(result, str) else res.get("message", "Unknown error")
-            console.print(f"[bold yellow]⚠️ API Warning for {tx_hash[:10]}...: {error_msg}[/bold yellow]")
+        if not result:
             return None
-
-        value_hex = result.get("value", "0x0") or "0x0"
-        value_wei = int(value_hex, 16)
-        value_eth = value_wei / 10**18
-
-        block_number = result.get("blockNumber")
-        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         
-        if block_number and block_number != "0x0":
-            b_params = {
-                "module": "block",
-                "action": "getblockreward",
-                "blockno": int(block_number, 16),
-                "apikey": self.api_key
-            }
-            try:
-                b_res = requests.get(ETHERSCAN_BASE_URL, params=b_params, timeout=10).json()
-                if isinstance(b_res.get("result"), dict) and b_res["result"].get("timeStamp"):
-                    ts_int = int(b_res["result"]["timeStamp"])
-                    timestamp = datetime.fromtimestamp(ts_int, timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-            except Exception:
-                pass
+        # Calculate Value in ETH
+        val_wei = int(result.get("value", "0x0"), 16)
+        val_eth = val_wei / 10**18
+        
+        # Get timestamp by block
+        block_num = result.get("blockNumber")
+        timestamp = "Pending"
+        if block_num:
+            block_url = f"https://api.etherscan.io/api?module=block&action=getblockreward&blockno={int(block_num, 16)}&apikey={ETHERSCAN_API_KEY}"
+            b_res = requests.get(block_url, timeout=5).json()
+            raw_ts = b_res.get("result", {}).get("timeStamp")
+            if raw_ts:
+                timestamp = datetime.fromtimestamp(int(raw_ts)).strftime('%Y-%m-%d %H:%M:%S UTC')
 
+        from_addr = result.get("from")
         to_addr = result.get("to")
-        if not to_addr:
-            to_addr = "Contract Creation"
-            to_classification = {"type": "Contract", "label": "Creation"}
-        else:
-            to_classification = self.classify_address(to_addr)
-
-        from_classification = self.classify_address(result.get("from", ""))
 
         return {
             "tx_hash": tx_hash,
-            "from": result.get("from", "Unknown"),
-            "from_type": from_classification,
+            "chain": "EVM",
+            "from": from_addr,
+            "from_type": classify_address(from_addr, "EVM"),
             "to": to_addr,
-            "to_type": to_classification,
-            "amount_eth": value_eth,
+            "to_type": classify_address(to_addr, "EVM"),
+            "value": f"{val_eth:.6f} ETH",
             "timestamp": timestamp,
-            "block": int(block_number, 16) if block_number else "Pending"
+            "block": block_num
         }
+    except Exception as e:
+        return {"error": str(e)}
 
-    def execute_trace(self, starting_hashes: list):
-        """Processes the target transactions once and builds downstream monitoring target list."""
-        with console.status("[bold green]⚙️ Working: Fetching transaction details & classifying entities...", spinner="dots"):
-            for tx_hash in starting_hashes:
-                if tx_hash in self.processed_txs:
-                    continue
-
-                tx_data = self.get_tx_details(tx_hash)
-                if tx_data:
-                    self.processed_txs.add(tx_hash)
-                    self.trace_history.append(tx_data)
-                    self.append_to_csv(tx_data)
-
-                    dest = tx_data["to"]
-                    if tx_data["to_type"]["type"] in ["EOA", "Contract/DEX"]:
-                        self.monitored_addresses.add(dest.lower())
-
-                    alert_msg = (
-                        f"Hash: `{tx_hash[:10]}...`\n"
-                        f"From: `{tx_data['from']}` ({tx_data['from_type']['type']})\n"
-                        f"To: `{tx_data['to']}` ({tx_data['to_type']['type']} - {tx_data['to_type']['label']})\n"
-                        f"Amount: {tx_data['amount_eth']:.4f} ETH\n"
-                        f"Time: {tx_data['timestamp']}"
-                    )
-                    trigger_alerts("Transaction Traced", alert_msg)
-                    time.sleep(0.3)
-
-    def compare_starting_transactions(self, starting_hashes: list):
-        """Compares two seed transactions and displays a comparative analysis."""
-        seed_records = [tx for tx in self.trace_history if tx['tx_hash'] in starting_hashes]
-
-        if len(seed_records) < 2:
-            console.print("[yellow]⚠️ Need at least 2 traced seed transactions to perform comparison.[/yellow]")
-            return
-
-        tx1, tx2 = seed_records[0], seed_records[1]
-
-        # Analyze similarities & differences
-        same_sender = tx1['from'].lower() == tx2['from'].lower()
-        same_recipient = tx1['to'].lower() == tx2['to'].lower()
-        same_entity_type = tx1['to_type']['type'] == tx2['to_type']['type']
+def fetch_btc_transaction(tx_hash: str):
+    """Fetches details for a Bitcoin transaction via Mempool.space."""
+    url = f"https://mempool.space/api/tx/{tx_hash}"
+    try:
+        res = requests.get(url, timeout=10)
+        if res.status_code != 200:
+            return None
+        data = res.json()
         
-        diff_amount = abs(tx1['amount_eth'] - tx2['amount_eth'])
-        total_value = tx1['amount_eth'] + tx2['amount_eth']
+        status = data.get("status", {})
+        block_time = status.get("block_time")
+        timestamp = datetime.fromtimestamp(block_time).strftime('%Y-%m-%d %H:%M:%S UTC') if block_time else "Unconfirmed"
+        
+        # Calculate total output amount in BTC
+        total_sats = sum([out.get("value", 0) for out in data.get("vout", [])])
+        total_btc = total_sats / 10**8
 
-        # Render Comparison Table
-        comp_table = Table(title="🔍 Seed Transaction Side-by-Side Comparison", expand=True)
-        comp_table.add_column("Property", style="bold cyan")
-        comp_table.add_column("Transaction 1", style="bold yellow")
-        comp_table.add_column("Transaction 2", style="bold yellow")
-        comp_table.add_column("Match Status", style="bold white")
+        inputs = [inp.get("prevout", {}).get("scriptpubkey_address") for inp in data.get("vin", []) if inp.get("prevout")]
+        outputs = [out.get("scriptpubkey_address") for out in data.get("vout", []) if out.get("scriptpubkey_address")]
 
-        comp_table.add_row(
-            "Tx Hash",
-            f"{tx1['tx_hash'][:10]}...",
-            f"{tx2['tx_hash'][:10]}...",
-            "-"
-        )
-        comp_table.add_row(
-            "Timestamp",
-            tx1['timestamp'],
-            tx2['timestamp'],
-            "-"
-        )
-        comp_table.add_row(
-            "From Address",
-            f"{tx1['from'][:8]}...",
-            f"{tx2['from'][:8]}...",
-            "[bold green]MATCH[/bold green]" if same_sender else "[red]DIFFERENT[/red]"
-        )
-        comp_table.add_row(
-            "To Address",
-            f"{tx1['to'][:8]}...",
-            f"{tx2['to'][:8]}...",
-            "[bold green]MATCH[/bold green]" if same_recipient else "[red]DIFFERENT[/red]"
-        )
-        comp_table.add_row(
-            "Destination Type",
-            f"{tx1['to_type']['type']} ({tx1['to_type']['label']})",
-            f"{tx2['to_type']['type']} ({tx2['to_type']['label']})",
-            "[bold green]MATCH[/bold green]" if same_entity_type else "[yellow]DIFFERENT[/yellow]"
-        )
-        comp_table.add_row(
-            "Amount (ETH)",
-            f"{tx1['amount_eth']:.4f} ETH",
-            f"{tx2['amount_eth']:.4f} ETH",
-            f"Diff: {diff_amount:.4f} ETH"
-        )
+        from_addr = inputs[0] if inputs else "Unknown"
+        to_addr = outputs[0] if outputs else "Unknown"
 
-        console.print(comp_table)
-
-        # Correlation Analysis Panel
-        insights = []
-        if same_sender:
-            insights.append("• Both transactions originated from the **SAME sender wallet**.")
-        else:
-            insights.append("• Originated from **DIFFERENT sender wallets**.")
-
-        if same_recipient:
-            insights.append("• Sent to the **EXACT SAME recipient** address.")
-        elif same_entity_type:
-            insights.append(f"• Both targets belong to the same entity category (**{tx1['to_type']['type']}**).")
-        else:
-            insights.append("• Target addresses belong to **DIFFERENT entity classes**.")
-
-        insights.append(f"• Combined Value Transferred: **{total_value:.4f} ETH**")
-
-        console.print(Panel(
-            "\n".join(insights),
-            title="📊 Correlation Analysis Summary",
-            border_style="magenta"
-        ))
-
-    def fetch_outgoing_txs(self, address: str) -> list:
-        params = {
-            "module": "account",
-            "action": "txlist",
-            "address": address,
-            "startblock": 0,
-            "endblock": 99999999,
-            "page": 1,
-            "offset": 50,
-            "sort": "desc",
-            "apikey": self.api_key
+        return {
+            "tx_hash": tx_hash,
+            "chain": "BTC",
+            "from": from_addr,
+            "from_type": classify_address(from_addr, "BTC"),
+            "to": to_addr,
+            "to_type": classify_address(to_addr, "BTC"),
+            "value": f"{total_btc:.6f} BTC",
+            "timestamp": timestamp,
+            "block": status.get("block_height", "Unconfirmed")
         }
-        try:
-            res = requests.get(ETHERSCAN_BASE_URL, params=params, timeout=10).json()
-            if res.get("status") == "1" and isinstance(res.get("result"), list):
-                return [tx for tx in res["result"] if tx.get("from", "").lower() == address.lower()]
-        except Exception as e:
-            console.print(f"[red]Error fetching transactions for {address}: {e}[/red]")
-        return []
+    except Exception as e:
+        return {"error": str(e)}
 
-    def poll_new_transactions(self) -> bool:
-        """Polls target addresses for downstream movements."""
-        new_events = False
-        addresses_to_scan = list(self.monitored_addresses)
+# ==========================================
+# MONITORING & EXECUTION ENGINE
+# ==========================================
+def print_status_bar(iteration, total, prefix='', suffix='', length=30):
+    """Displays terminal progress bar status."""
+    percent = f"{100 * (iteration / float(total)):.1f}"
+    filled_length = int(length * iteration // total)
+    bar = '█' * filled_length + '-' * (length - filled_length)
+    sys.stdout.write(f'\r{prefix} |{bar}| {percent}% {suffix}')
+    sys.stdout.flush()
 
-        with console.status(f"[bold cyan]⚙️ Working: Scanning {len(addresses_to_scan)} target wallet(s)...", spinner="line"):
-            for addr in addresses_to_scan:
-                txs = self.fetch_outgoing_txs(addr)
-                for tx in txs:
-                    tx_hash = tx.get("hash")
-                    if tx_hash in self.processed_txs:
-                        continue
+def run_trace_and_monitor():
+    print("\n=======================================================")
+    print("      CRYPTO TRANSACTION TRACER & CONTINUOUS MONITOR    ")
+    print("=======================================================\n")
+    print(f"[*] Target Reference Hash to Match:\n    {TARGET_COMPARE_HASH}\n")
+    
+    seen_transactions = set()
+    poll_count = 0
 
-                    value_eth = int(tx.get("value", 0)) / 10**18
-                    ts_int = int(tx.get("timeStamp", time.time()))
-                    formatted_ts = datetime.fromtimestamp(ts_int, timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-
-                    to_addr = tx.get("to", "")
-                    to_class = self.classify_address(to_addr)
-                    from_class = self.classify_address(addr)
-
-                    record = {
-                        "tx_hash": tx_hash,
-                        "from": addr,
-                        "from_type": from_class,
-                        "to": to_addr,
-                        "to_type": to_class,
-                        "amount_eth": value_eth,
-                        "timestamp": formatted_ts,
-                        "block": tx.get("blockNumber")
-                    }
-
-                    self.processed_txs.add(tx_hash)
-                    self.trace_history.append(record)
-                    new_events = True
-
-                    self.append_to_csv(record)
-
-                    if to_class["type"] in ["EOA"]:
-                        self.monitored_addresses.add(to_addr.lower())
-
-                    alert_msg = (
-                        f"New Downstream Transfer Detected!\n"
-                        f"Hash: `{tx_hash[:10]}...`\n"
-                        f"From: `{addr}`\n"
-                        f"To: `{to_addr}` ({to_class['type']} - {to_class['label']})\n"
-                        f"Amount: {value_eth:.4f} ETH\n"
-                        f"Time: {formatted_ts}"
-                    )
-                    trigger_alerts("Downstream Movement Detected", alert_msg)
-                
-                time.sleep(0.2)
-
-        return new_events
-
-# ==============================================================================
-# UI DISPLAY & INTERACTIVE PROMPT
-# ==============================================================================
-
-def render_dashboard(tracer: CryptoTracer, status: str = "TRACE COMPLETE") -> Table:
-    title_text = f"💎 Crypto Trace Dashboard | Status: [bold cyan]{status}[/bold cyan]"
-    table = Table(title=title_text, expand=True)
-
-    table.add_column("Timestamp", style="cyan", no_wrap=True)
-    table.add_column("Tx Hash", style="bold yellow")
-    table.add_column("From", style="magenta")
-    table.add_column("To Target", style="green")
-    table.add_column("Entity Type", style="bold magenta")
-    table.add_column("Amount (ETH)", justify="right", style="bold green")
-
-    for item in tracer.trace_history[-12:]:
-        dest_type = item['to_type']['type']
-        
-        if dest_type == "CEX":
-            type_styled = f"[bold red]CEX ({item['to_type']['label']})[/bold red]"
-        elif "DEX" in dest_type:
-            type_styled = f"[bold yellow]DEX ({item['to_type']['label']})[/bold yellow]"
-        else:
-            type_styled = f"[blue]Wallet ({item['to_type']['label']})[/blue]"
-
-        table.add_row(
-            item['timestamp'],
-            f"{item['tx_hash'][:8]}...{item['tx_hash'][-6:]}",
-            f"{item['from'][:6]}...{item['from'][-4:]}",
-            f"{item['to'][:6]}...{item['to'][-4:]}" if item['to'] else "N/A",
-            type_styled,
-            f"{item['amount_eth']:.4f} ETH"
-        )
-
-    return table
-
-def prompt_start_monitoring() -> bool:
-    """Interactively asks the user if they wish to start live monitoring."""
-    console.print()
-    return Confirm.ask("📡 [bold yellow]Would you like to start active monitoring on the destination addresses?[/bold yellow]")
-
-def start_monitoring_loop(tracer: CryptoTracer, poll_interval: int = 12):
-    """Enters the continuous active monitoring loop."""
-    counter = 0
     try:
         while True:
-            counter += 1
-            tracer.poll_new_transactions()
+            poll_count += 1
+            timestamp_now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+            print(f"\n--- [Cycle #{poll_count} | {timestamp_now}] Scanning Transactions ---")
             
-            status_text = f"Loop #{counter} | Monitored Targets: {len(tracer.monitored_addresses)} | Logged Txs: {len(tracer.processed_txs)}"
+            total_items = len(TRACKED_ITEMS)
             
-            console.clear()
-            console.print(render_dashboard(tracer, status="🟢 CURRENTLY MONITORING"))
-            console.print(Panel(
-                f"[bold green]📡 ACTIVE MONITORING LIVE ON-CHAIN...[/bold green]\n"
-                f"{status_text}\n"
-                f"Next network scan in {poll_interval}s. (Press Ctrl+C to stop)",
-                title="Active Watcher Status"
-            ))
+            for index, item in enumerate(TRACKED_ITEMS):
+                print_status_bar(index + 1, total_items, prefix='Progress:', suffix='Checking...', length=25)
+                
+                tx_hash = item.get("tx_hash")
+                if not tx_hash:
+                    continue
+                
+                # Direct comparison with target hash
+                is_target_match = (tx_hash.lower() == TARGET_COMPARE_HASH.lower())
+                
+                # Fetch Transaction Data
+                if item["type"] == "EVM":
+                    tx_data = fetch_evm_transaction(tx_hash)
+                else:
+                    tx_data = fetch_btc_transaction(tx_hash)
+                
+                if not tx_data or "error" in tx_data:
+                    continue
 
-            time.sleep(poll_interval)
+                # Format Output Log
+                log_output = (
+                    f"\n\n[+] Hash: {tx_hash}\n"
+                    f"    - Chain: {tx_data['chain']}\n"
+                    f"    - Timestamp: {tx_data['timestamp']}\n"
+                    f"    - Expected Input Amount: {item['expected_amount']}\n"
+                    f"    - On-Chain Value: {tx_data['value']}\n"
+                    f"    - Sender ({tx_data['from_type']}): {tx_data['from']}\n"
+                    f"    - Recipient ({tx_data['to_type']}): {tx_data['to']}\n"
+                    f"    - Target Hash Match: {'YES 🎯' if is_target_match else 'NO'}"
+                )
+                print(log_output)
+
+                # Check if new transaction observed
+                if tx_hash not in seen_transactions:
+                    seen_transactions.add(tx_hash)
+                    if is_target_match:
+                        notify_user(
+                            "TARGET TRANSACTION MATCH DETECTED",
+                            f"Matched Target Tx: {tx_hash}\nAmount: {tx_data['value']}\nTimestamp: {tx_data['timestamp']}"
+                        )
+            
+            print(f"\n\n[✓] Cycle #{poll_count} complete. Waiting 30 seconds for continuous monitoring (Press Ctrl+C to stop)...")
+            time.sleep(30)
+            
     except KeyboardInterrupt:
-        console.print(f"\n[bold green]📁 Monitoring stopped. Trace state saved to '{tracer.csv_filepath}'.[/bold green]")
-
-def main():
-    tracer = CryptoTracer(ETHERSCAN_API_KEY, CSV_FILE_PATH)
-
-    # 1. Load existing state if available
-    tracer.load_state_from_csv()
-    
-    # 2. Run initial trace
-    tracer.execute_trace(STARTING_TXS)
-
-    # 3. Output results dashboard
-    console.clear()
-    console.print(render_dashboard(tracer))
-    console.print(Panel(
-        f"[bold green]✅ Trace completed successfully![/bold green]\n"
-        f"Processed Transactions: {len(tracer.processed_txs)}\n"
-        f"Discovered Targets for Monitoring: {len(tracer.monitored_addresses)}\n"
-        f"Results saved to: '{CSV_FILE_PATH}'",
-        title="Execution Summary"
-    ))
-
-    # 4. Side-by-side seed transaction comparison
-    console.print("\n")
-    tracer.compare_starting_transactions(STARTING_TXS)
-
-    # 5. Prompt user to begin active monitoring
-    if prompt_start_monitoring():
-        start_monitoring_loop(tracer)
-    else:
-        console.print("\n[bold yellow]Exiting script without starting live monitoring.[/bold yellow]")
+        print("\n\n[!] Tracer stopped by user.")
 
 if __name__ == "__main__":
-    main()
+    run_trace_and_monitor()
