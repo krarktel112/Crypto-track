@@ -4,7 +4,7 @@ import time
 import requests
 
 # ---------------------------------------------------------------------------
-# DATA RECOVERY CONFIGURATION (Case-preserved input strings)
+# CORE DATA SET
 # ---------------------------------------------------------------------------
 TARGET_ADDRESSES = [
     "bc1p22p5ywpdc4ptglryn4d8j2tzwg00ml5qd9aqaarnjekqpzj5rl3sqs93w9",
@@ -24,6 +24,8 @@ CSV_FILE = "bitcoin_scam_trace_log.csv"
 
 
 def identify_entity_type(address):
+  if not address:
+    return "Unknown Node"
   if address.startswith("bc1p"):
     return "Taproot (High Privacy / Complex Script)"
   elif address.startswith("bc1q"):
@@ -46,7 +48,14 @@ def check_laundering_patterns(inputs_count, outputs_count, value_btc):
 
 
 def trace_bitcoin_wallets():
-  print(f"Connecting to Mempool Engine to evaluate {len(TARGET_ADDRESSES)} nodes...")
+  print("Connecting to Mempool Engine...")
+
+  # Enforce custom headers to prevent local environment request manipulation
+  headers = {
+      "User-Agent": (
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      )
+  }
 
   with open(CSV_FILE, mode="w", newline="", encoding="utf-8") as f:
     writer = csv.writer(f)
@@ -63,22 +72,25 @@ def trace_bitcoin_wallets():
     ])
 
     for wallet in TARGET_ADDRESSES:
-      # Mempool API retains precise capitalization formatting required for Bech32 strings
-      url = f"https://mempool.space{wallet}/txs"
+      # Hardcoded domain separation to stop string smashing bugs
+      base_url = "https://mempool.space"
+      endpoint = f"/api/address/{wallet}/txs"
+      full_url = base_url + endpoint
+
       try:
-        response = requests.get(url)
+        response = requests.get(full_url, headers=headers, timeout=15)
+
         if response.status_code != 200:
-          print(f"Skipping {wallet}: Server error code {response.status_code}")
+          print(f"Skipping {wallet}: HTTP Error {response.status_code}")
           continue
 
         txs = response.json()
-        print(f"Processing {len(txs)} transactions found for: {wallet}")
+        print(f"Successfully pulled {len(txs)} transactions for: {wallet}")
 
         for tx in txs:
           tx_hash = tx.get("txid")
           is_scam_hash_match = "YES" if tx_hash in KNOWN_SCAM_HASHES else "No"
 
-          # Extract Unix timestamp from block header info
           status = tx.get("status", {})
           block_time = status.get("block_time", 0)
           tx_time = (
@@ -90,27 +102,28 @@ def trace_bitcoin_wallets():
           inputs = tx.get("vin", [])
           outputs = tx.get("vout", [])
 
-          # 1. Evaluate Incoming Path Transactions
+          # 1. Map Inbound Sources
           for inp in inputs:
             prevout = inp.get("prevout", {})
-            in_addr = prevout.get("scriptpubkey_address")
-            value_btc = prevout.get("value", 0) / 100000000.0
+            if prevout:
+              in_addr = prevout.get("scriptpubkey_address")
+              value_btc = prevout.get("value", 0) / 100000000.0
 
-            if in_addr and in_addr != wallet:
-              w_type = identify_entity_type(in_addr)
-              writer.writerow([
-                  wallet,
-                  tx_time,
-                  tx_hash,
-                  "INBOUND",
-                  in_addr,
-                  value_btc,
-                  w_type,
-                  "Source Input Node",
-                  is_scam_hash_match,
-              ])
+              if in_addr and in_addr != wallet:
+                w_type = identify_entity_type(in_addr)
+                writer.writerow([
+                    wallet,
+                    tx_time,
+                    tx_hash,
+                    "INBOUND",
+                    in_addr,
+                    value_btc,
+                    w_type,
+                    "Source Input Node",
+                    is_scam_hash_match,
+                ])
 
-          # 2. Evaluate Outgoing Path Transactions
+          # 2. Map Outbound Destinations
           for out in outputs:
             out_addr = out.get("scriptpubkey_address")
             value_btc = out.get("value", 0) / 100000000.0
@@ -131,13 +144,13 @@ def trace_bitcoin_wallets():
                   w_type,
                   risk_notes,
                   is_scam_hash_match,
-              ])
+                ])
 
-        time.sleep(1)  # Rate limiting compliance for the free tier public endpoint
+        time.sleep(1)  # Anti-blocking delay
       except Exception as e:
-        print(f"Critical error mapping node {wallet}: {str(e)}")
+        print(f"Error mapping node {wallet}: {str(e)}")
 
-  print(f"\nSUCCESS: Processing Complete. Output saved to '{CSV_FILE}'")
+  print(f"\nSUCCESS: Processing Complete. Log generated: '{CSV_FILE}'")
 
 
 if __name__ == "__main__":
