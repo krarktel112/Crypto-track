@@ -30,22 +30,42 @@ PORTFOLIO_2_COSTS = {
 }
 
 def fetch_live_balances():
-    """Queries Coinbase to pull actual active balances dynamically."""
+    """Queries Coinbase to pull actual active balances dynamically, handling object model properties."""
     live_portfolio = {}
     try:
         response = client.get_accounts()
-        accounts = response.get("accounts", [])
-        for account in accounts:
-            ticker = account.get("currency")
-            balance_str = account.get("available_balance", {}).get("value", "0")
-            balance = float(balance_str)
+        
+        # Modern SDK returns an object with an 'accounts' attribute containing a list
+        if hasattr(response, "accounts"):
+            accounts = response.accounts
+        elif isinstance(response, dict):
+            accounts = response.get("accounts", [])
+        else:
+            accounts = []
             
-            # Keep only realistic, standard asset symbols
-            if balance > 0 and ticker and len(ticker) <= 4:
-                live_portfolio[ticker.upper()] = balance
+        for account in accounts:
+            # Handle both object attributes and legacy dictionary keys safely
+            if hasattr(account, "currency"):
+                ticker = account.currency
+                balance_str = account.available_balance.value if hasattr(account, "available_balance") else "0"
+            else:
+                ticker = account.get("currency")
+                balance_str = account.get("available_balance", {}).get("value", "0")
+                
+            try:
+                balance = float(balance_str)
+            except (ValueError, TypeError):
+                balance = 0.0
+                
+            # Filter out empty entries and internal non-tradable strings
+            if balance > 0 and ticker and len(str(ticker)) <= 4:
+                live_portfolio[str(ticker).upper()] = balance
+                
     except Exception as e:
         print(f"Warning: Could not fetch live balances ({e}). Using fallback data.")
+        
     return live_portfolio
+
 
 def get_sdk_price(ticker):
     """Uses the official Coinbase SDK to get clean prices with a reliable public fallback."""
