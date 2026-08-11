@@ -48,22 +48,31 @@ def fetch_live_balances():
     return live_portfolio
 
 def get_sdk_price(ticker):
-    """Uses the official Coinbase SDK to get clean prices, avoiding URL concatenation bugs."""
+    """Uses the official Coinbase SDK to get clean prices with a reliable public fallback."""
+    clean_ticker = str(ticker).strip().upper()
+    product_id = f"{clean_ticker}-USD"
+    
+    # 1. Primary Attempt: Use the SDK Client
     try:
-        clean_ticker = str(ticker).strip().upper()
-        product_id = f"{clean_ticker}-USD"
-        
-        # Use the SDK directly instead of hitting a raw text URL
         product = client.get_product(product_id=product_id)
-        return float(product.get("price", "0"))
+        if isinstance(product, dict) and "price" in product:
+            return float(product["price"])
+        elif hasattr(product, "price"):
+            return float(product.price)
     except Exception:
-        # Secondary fallback to the legacy public endpoint if the SDK call fails
-        try:
-            url = f"https://coinbase.com{ticker}-USD/spot"
-            res = requests.get(url, timeout=5)
+        pass  # Fall through to fallback if SDK fails or authentication is strictly read-only
+        
+    # 2. Secondary Attempt: Safe Public REST Endpoint (No API Key Required)
+    try:
+        url = f"https://coinbase.com{clean_ticker}-USD/spot"
+        res = requests.get(url, timeout=5)
+        if res.status_code == 200:
             return float(res.json()['data']['amount'])
-        except Exception:
-            return 0.0
+    except Exception:
+        pass
+        
+    return 0.0
+
 
 def calculate_asset_profit(ticker, amount, price, cost_basis_dict):
     value = amount * price
