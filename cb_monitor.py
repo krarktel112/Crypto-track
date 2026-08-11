@@ -7,13 +7,12 @@ from coinbase.rest import RESTClient
 API_KEY_NAME = os.environ.get("COINBASE_API_KEY_NAME", "your_api_key_name_here")
 API_SECRET_KEY = os.environ.get("COINBASE_API_SECRET", "your_api_secret_key_here")
 
-# Initialize via RESTClient instead of CoinbaseAdvancedClient
 client = RESTClient(api_key=API_KEY_NAME, api_secret=API_SECRET_KEY)
 
 # --- COINBASE ADVANCED FEE CONFIGURATION ---
 FEE_TICKERS = {
-    "MAKER": 0.0040,  # 0.40% for limit orders resting on the book
-    "TAKER": 0.0060   # 0.60% for market orders filled instantly
+    "MAKER": 0.0040,  
+    "TAKER": 0.0060   
 }
 ACTIVE_FEE_MODE = "TAKER"
 
@@ -33,22 +32,26 @@ PORTFOLIO_2_COSTS = {
 def fetch_live_balances():
     live_portfolio = {}
     try:
-        # Use the correct SDK endpoint for modern REST client structure
         response = client.get_accounts()
         accounts = response.get("accounts", [])
         for account in accounts:
             ticker = account.get("currency")
             balance_str = account.get("available_balance", {}).get("value", "0")
             balance = float(balance_str)
-            if balance > 0:
-                live_portfolio[ticker] = balance
+            # Filter out empty accounts and non-standard internal strings
+            if balance > 0 and ticker and len(ticker) <= 5:
+                live_portfolio[ticker.upper()] = balance
     except Exception as e:
         print(f"Warning: Could not fetch live data from Coinbase API ({e}). Using fallback data.")
     return live_portfolio
 
 def get_crypto_price(ticker):
-    url = f'https://coinbase.com{ticker}-USD/spot'
-    response = requests.get(url)
+    # Sanitize and force string formatting to prevent URL malformation
+    clean_ticker = str(ticker).strip().upper()
+    url = f"https://coinbase.com{clean_ticker}-USD/spot"
+    
+    response = requests.get(url, timeout=10)
+    response.raise_for_status() # Force error status if endpoint fails
     data = response.json()
     return float(data['data']['amount'])
 
@@ -76,6 +79,7 @@ def display_portfolio(portfolio, rewards):
         try:
             price = get_crypto_price(ticker)
         except Exception:
+            # Skip asset silently if Coinbase spot endpoint doesn't support the pair
             continue
             
         value, profit, status = calculate_asset_profit(ticker, amount, price, PORTFOLIO_1_COSTS)
@@ -108,17 +112,20 @@ def display_portfolio(portfolio, rewards):
     print(f"----------------------------------------------------------\n")
 
 def conversion_matrix(recover_amount, label):
-    ethereum = get_crypto_price("ETH")
-    solana = get_crypto_price("SOL")
-    
-    value_eth = (((recover_amount / ethereum) / 0.04307645) * 0.15)
-    value_sol = (((recover_amount / solana) / 0.051702936) * 0.01)
-    
-    x = recover_amount / ethereum 
-    y = recover_amount / solana
-    
-    print(f"[{label}] Ethereum {round(x, 5)}: ${value_eth:.2f}")
-    print(f"[{label}] Solana {round(y, 5)}: ${value_sol:.2f}")
+    try:
+        ethereum = get_crypto_price("ETH")
+        solana = get_crypto_price("SOL")
+        
+        value_eth = (((recover_amount / ethereum) / 0.04307645) * 0.15)
+        value_sol = (((recover_amount / solana) / 0.051702936) * 0.01)
+        
+        x = recover_amount / ethereum 
+        y = recover_amount / solana
+        
+        print(f"[{label}] Ethereum {round(x, 5)}: ${value_eth:.2f}")
+        print(f"[{label}] Solana {round(y, 5)}: ${value_sol:.2f}")
+    except Exception as e:
+        print(f"[{label}] Conversion matrix paused: Market price fetch error ({e})")
 
 def main():
     while True:
