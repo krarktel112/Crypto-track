@@ -30,12 +30,12 @@ PORTFOLIO_2_COSTS = {
 }
 
 def fetch_live_balances():
-    """Queries Coinbase to pull actual active balances dynamically, handling object model properties."""
+    """Queries Coinbase to pull actual active balances dynamically, handling dictionary layout keys."""
     live_portfolio = {}
     try:
         response = client.get_accounts()
         
-        # Modern SDK returns an object with an 'accounts' attribute containing a list
+        # 1. Safely extract the accounts list depending on layout
         if hasattr(response, "accounts"):
             accounts = response.accounts
         elif isinstance(response, dict):
@@ -44,20 +44,28 @@ def fetch_live_balances():
             accounts = []
             
         for account in accounts:
-            # Handle both object attributes and legacy dictionary keys safely
-            if hasattr(account, "currency"):
-                ticker = account.currency
-                balance_str = account.available_balance.value if hasattr(account, "available_balance") else "0"
-            else:
+            # 2. Check if the individual account block is a dict or an object
+            if isinstance(account, dict):
                 ticker = account.get("currency")
-                balance_str = account.get("available_balance", {}).get("value", "0")
+                # Safely extract value from nested dictionaries
+                bal_block = account.get("available_balance", {})
+                if isinstance(bal_block, dict):
+                    balance_str = bal_block.get("value", "0")
+                else:
+                    balance_str = getattr(bal_block, "value", "0")
+            else:
+                ticker = getattr(account, "currency", None)
+                if hasattr(account, "available_balance"):
+                    balance_str = getattr(account.available_balance, "value", "0")
+                else:
+                    balance_str = "0"
                 
             try:
                 balance = float(balance_str)
             except (ValueError, TypeError):
                 balance = 0.0
                 
-            # Filter out empty entries and internal non-tradable strings
+            # Filter out empty accounts and non-standard internal strings
             if balance > 0 and ticker and len(str(ticker)) <= 4:
                 live_portfolio[str(ticker).upper()] = balance
                 
@@ -65,6 +73,7 @@ def fetch_live_balances():
         print(f"Warning: Could not fetch live balances ({e}). Using fallback data.")
         
     return live_portfolio
+
 
 
 def get_sdk_price(ticker):
