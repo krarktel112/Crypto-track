@@ -3,7 +3,7 @@ import time
 import requests
 from coinbase.rest import RESTClient
 
-# Initialize the secure client using the corrected modern SDK syntax
+# Initialize the secure client
 API_KEY_NAME = os.environ.get("COINBASE_API_KEY_NAME", "your_api_key_name_here")
 API_SECRET_KEY = os.environ.get("COINBASE_API_SECRET", "your_api_secret_key_here")
 
@@ -30,6 +30,7 @@ PORTFOLIO_2_COSTS = {
 }
 
 def fetch_live_balances():
+    """Queries Coinbase to pull actual active balances dynamically."""
     live_portfolio = {}
     try:
         response = client.get_accounts()
@@ -38,22 +39,31 @@ def fetch_live_balances():
             ticker = account.get("currency")
             balance_str = account.get("available_balance", {}).get("value", "0")
             balance = float(balance_str)
-            # Filter out empty accounts and non-standard internal strings
-            if balance > 0 and ticker and len(ticker) <= 5:
+            
+            # Keep only realistic, standard asset symbols
+            if balance > 0 and ticker and len(ticker) <= 4:
                 live_portfolio[ticker.upper()] = balance
     except Exception as e:
-        print(f"Warning: Could not fetch live data from Coinbase API ({e}). Using fallback data.")
+        print(f"Warning: Could not fetch live balances ({e}). Using fallback data.")
     return live_portfolio
 
-def get_crypto_price(ticker):
-    # Sanitize and force string formatting to prevent URL malformation
-    clean_ticker = str(ticker).strip().upper()
-    url = f"https://coinbase.com{clean_ticker}-USD/spot"
-    
-    response = requests.get(url, timeout=10)
-    response.raise_for_status() # Force error status if endpoint fails
-    data = response.json()
-    return float(data['data']['amount'])
+def get_sdk_price(ticker):
+    """Uses the official Coinbase SDK to get clean prices, avoiding URL concatenation bugs."""
+    try:
+        clean_ticker = str(ticker).strip().upper()
+        product_id = f"{clean_ticker}-USD"
+        
+        # Use the SDK directly instead of hitting a raw text URL
+        product = client.get_product(product_id=product_id)
+        return float(product.get("price", "0"))
+    except Exception:
+        # Secondary fallback to the legacy public endpoint if the SDK call fails
+        try:
+            url = f"https://coinbase.com{ticker}-USD/spot"
+            res = requests.get(url, timeout=5)
+            return float(res.json()['data']['amount'])
+        except Exception:
+            return 0.0
 
 def calculate_asset_profit(ticker, amount, price, cost_basis_dict):
     value = amount * price
@@ -76,10 +86,8 @@ def display_portfolio(portfolio, rewards):
     total_value = 0.0
     total_profit = 0.0
     for ticker, amount in portfolio.items():
-        try:
-            price = get_crypto_price(ticker)
-        except Exception:
-            # Skip asset silently if Coinbase spot endpoint doesn't support the pair
+        price = get_sdk_price(ticker)
+        if price == 0.0:
             continue
             
         value, profit, status = calculate_asset_profit(ticker, amount, price, PORTFOLIO_1_COSTS)
@@ -96,9 +104,8 @@ def display_portfolio(portfolio, rewards):
     total_rewards_value = 0.0
     total_rewards_profit = 0.0
     for ticker, amount in rewards.items():
-        try:
-            price = get_crypto_price(ticker)
-        except Exception:
+        price = get_sdk_price(ticker)
+        if price == 0.0:
             continue
             
         value, profit, status = calculate_asset_profit(ticker, amount, price, PORTFOLIO_2_COSTS)
@@ -112,20 +119,21 @@ def display_portfolio(portfolio, rewards):
     print(f"----------------------------------------------------------\n")
 
 def conversion_matrix(recover_amount, label):
-    try:
-        ethereum = get_crypto_price("ETH")
-        solana = get_crypto_price("SOL")
+    ethereum = get_sdk_price("ETH")
+    solana = get_sdk_price("SOL")
+    
+    if ethereum == 0.0 or solana == 0.0:
+        print(f"[{label}] Conversion matrix paused: Missing asset prices.")
+        return
         
-        value_eth = (((recover_amount / ethereum) / 0.04307645) * 0.15)
-        value_sol = (((recover_amount / solana) / 0.051702936) * 0.01)
-        
-        x = recover_amount / ethereum 
-        y = recover_amount / solana
-        
-        print(f"[{label}] Ethereum {round(x, 5)}: ${value_eth:.2f}")
-        print(f"[{label}] Solana {round(y, 5)}: ${value_sol:.2f}")
-    except Exception as e:
-        print(f"[{label}] Conversion matrix paused: Market price fetch error ({e})")
+    value_eth = (((recover_amount / ethereum) / 0.04307645) * 0.15)
+    value_sol = (((recover_amount / solana) / 0.051702936) * 0.01)
+    
+    x = recover_amount / ethereum 
+    y = recover_amount / solana
+    
+    print(f"[{label}] Ethereum {round(x, 5)}: ${value_eth:.2f}")
+    print(f"[{label}] Solana {round(y, 5)}: ${value_sol:.2f}")
 
 def main():
     while True:
@@ -147,7 +155,7 @@ def main():
             conversion_matrix(6008.08, "Recovery Tier 2")
             
         except Exception as e:
-            print(f"Error, retrying. Details: {e}")
+            print(f"Error in execution loop: {e}")
             
         time.sleep(30)
         os.system('cls' if os.name == 'nt' else 'clear')
