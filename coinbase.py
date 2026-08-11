@@ -1,21 +1,21 @@
 import os
 import time
 import requests
-from coinbase.advanced.client import CoinbaseAdvancedClient
+from coinbase.rest import RESTClient
 
-# Initialize the secure client using your CDP API key details
+# Initialize the secure client using the corrected modern SDK syntax
 API_KEY_NAME = os.environ.get("COINBASE_API_KEY_NAME", "your_api_key_name_here")
 API_SECRET_KEY = os.environ.get("COINBASE_API_SECRET", "your_api_secret_key_here")
 
-client = CoinbaseAdvancedClient(api_key=API_KEY_NAME, api_secret=API_SECRET_KEY)
+# Initialize via RESTClient instead of CoinbaseAdvancedClient
+client = RESTClient(api_key=API_KEY_NAME, api_secret=API_SECRET_KEY)
 
 # --- COINBASE ADVANCED FEE CONFIGURATION ---
-# Base volume tier ($0-$10k) spot trading fees: Maker = 0.40%, Taker = 0.60%
 FEE_TICKERS = {
     "MAKER": 0.0040,  # 0.40% for limit orders resting on the book
-    "TAKER": 0.0060   # 0.60% for market orders filled instantly (default fallback)
+    "TAKER": 0.0060   # 0.60% for market orders filled instantly
 }
-ACTIVE_FEE_MODE = "TAKER"  # Change to "MAKER" if you primarily use post-only limit orders
+ACTIVE_FEE_MODE = "TAKER"
 
 # --- COST BASIS CONFIGURATION ---
 PORTFOLIO_1_COSTS = {
@@ -33,6 +33,7 @@ PORTFOLIO_2_COSTS = {
 def fetch_live_balances():
     live_portfolio = {}
     try:
+        # Use the correct SDK endpoint for modern REST client structure
         response = client.get_accounts()
         accounts = response.get("accounts", [])
         for account in accounts:
@@ -52,14 +53,9 @@ def get_crypto_price(ticker):
     return float(data['data']['amount'])
 
 def calculate_asset_profit(ticker, amount, price, cost_basis_dict):
-    """Calculates asset valuation and profit margins using true Coinbase Advanced fee configurations."""
     value = amount * price
     cost = cost_basis_dict.get(ticker, 0.0)
-    
-    # Extract exact percentage factor based on your trading style selection
     fee_factor = FEE_TICKERS.get(ACTIVE_FEE_MODE, 0.0060)
-    
-    # Profit = Current Valuation - Your Initial Investment Capital - Realized Trading Fee
     profit = value - cost - (value * fee_factor)
     
     if ticker == "BTC":
