@@ -154,9 +154,10 @@ def main_verification_loop():
     print("==========================================================\n")
 
 if __name__ == "__main__":
-    try:
-        main_verification_loop()
-        time.sleep(30)
-    except:
-        print("Error, retrying")
-        time.sleep(30)
+    while True:
+        try:
+            main_verification_loop()
+            time.sleep(30)
+            except:
+                print("Error, retrying")
+                time.sleep(30)
