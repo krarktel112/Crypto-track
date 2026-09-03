@@ -18,9 +18,9 @@ BASE_PURCHASE_AMOUNTS = {
 
 # --- 2. SET YOUR FIXED HARDCODED AVERAGE BUY COSTS ---
 AVERAGE_PRICES = {
-    "BTC": 0.00,  # Example: Change to your exact average entry cost
-    "ETH": 0.00,   # Example: Change to your exact average entry cost
-    "SOL": 0.00     # Example: Change to your exact average entry cost
+    "BTC": 0.01,  # Example: Change to your exact average entry cost
+    "ETH": 0.01,   # Example: Change to your exact average entry cost
+    "SOL": 0.01     # Example: Change to your exact average entry cost
 }
 
 def fetch_auto_staking_rewards():
