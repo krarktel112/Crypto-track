@@ -12,15 +12,15 @@ client = RESTClient(api_key=API_KEY_NAME, api_secret=API_SECRET_KEY)
 # Type what you originally bought/staked (excluding any generated rewards).
 BASE_PURCHASE_AMOUNTS = {
     "BTC": 0.00000000, 
-    "ETH": 0.00105000, 
+    "ETH": 0.00000000, 
     "SOL": 0.06276400  
 }
 
 # --- 2. SET YOUR FIXED HARDCODED AVERAGE BUY COSTS ---
 AVERAGE_PRICES = {
     "BTC": 0.01,  # Example: Change to your exact average entry cost
-    "ETH": 1880.56,   # Example: Change to your exact average entry cost
-    "SOL": 82.93     # Example: Change to your exact average entry cost
+    "ETH": 0.0,   # Example: Change to your exact average entry cost
+    "SOL": 87.35     # Example: Change to your exact average entry cost
 }
 
 def fetch_auto_staking_rewards():
