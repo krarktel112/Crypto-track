@@ -25,7 +25,7 @@ AVERAGE_PRICES = {
 
 def fetch_auto_staking_rewards():
     """Scans all historical transaction events to tally up every reward payout."""
-    rewards_tally = {"ETH" 0.0:"SOL": 0.0, "BTC": 0.0}
+    rewards_tally = {"ETH": 0.0, "SOL": 0.0, "BTC": 0.0}
     
     try:
         # Pull accounts to find internal wallet IDs needed for ledger checks
