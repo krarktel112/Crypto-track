@@ -12,20 +12,20 @@ client = RESTClient(api_key=API_KEY_NAME, api_secret=API_SECRET_KEY)
 # Type what you originally bought/staked (excluding any generated rewards).
 BASE_PURCHASE_AMOUNTS = {
     "BTC": 0.00000000, 
-    #"ETH": 0.00000000, 
+    "ETH": 0.00000000, 
     "SOL": 0.06276400  
 }
 
 # --- 2. SET YOUR FIXED HARDCODED AVERAGE BUY COSTS ---
 AVERAGE_PRICES = {
     "BTC": 0.01,  # Example: Change to your exact average entry cost
-    #"ETH": 0.0,   # Example: Change to your exact average entry cost
+    "ETH": 0.0,   # Example: Change to your exact average entry cost
     "SOL": 87.35     # Example: Change to your exact average entry cost
 }
 
 def fetch_auto_staking_rewards():
     """Scans all historical transaction events to tally up every reward payout."""
-    rewards_tally = {"SOL": 0.0, "BTC": 0.0}
+    rewards_tally = {"ETH" 0.0:"SOL": 0.0, "BTC": 0.0}
     
     try:
         # Pull accounts to find internal wallet IDs needed for ledger checks
