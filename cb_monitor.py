@@ -13,7 +13,7 @@ client = RESTClient(api_key=API_KEY_NAME, api_secret=API_SECRET_KEY)
 BASE_PURCHASE_AMOUNTS = {
     "BTC": 0.00000000, 
     "ETH": 0.00000000, 
-    "SOL": 0.00000000  
+    "SOL": 0.11361177
 }
 
 # --- 2. SET YOUR FIXED HARDCODED AVERAGE BUY COSTS ---
