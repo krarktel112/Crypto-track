@@ -23,12 +23,28 @@ AVERAGE_PRICES = {
     "SOL": 87.35  # Example: Change to your exact average entry cost
 }
 
+def fetch_staked_solana_balance():
+    """Queries Coinbase's dedicated Earn/Staking API to find hidden staked SOL."""
+    try:
+        # Calls the specific CDP Earn/Staking endpoint
+        response = client.get_staking_balances()
+        data = response.to_dict() if hasattr(response, "to_dict") else response
+        balances = data.get("balances", [])
+        
+        for bal in balances:
+            # Check for Solana staking allocations
+            if str(bal.get("currency", "")).upper().strip() == "SOL":
+                return float(bal.get("amount", {}).get("value", "0"))
+    except Exception:
+        # Fallback if your API key lacks explicit Earn/Staking permissions
+        pass
+    return 0.0
+
 def fetch_auto_staking_rewards():
     """Scans all historical transaction events to tally up every reward payout."""
     rewards_tally = {"ETH": 0.0, "SOL": 0.0, "BTC": 0.0}
     
     try:
-        # Pull accounts to find internal wallet IDs needed for ledger checks
         response = client.get_accounts(limit=250)
         data = response.to_dict() if hasattr(response, "to_dict") else (response if isinstance(response, dict) else {})
         accounts = data.get("accounts", [])
@@ -41,14 +57,12 @@ def fetch_auto_staking_rewards():
                 if not account_id:
                     continue
                 
-                # Pull the ledger records for this specific coin container
                 try:
                     tx_response = client.get_account_transactions(account_uuid=account_id, limit=100)
                     tx_data = tx_response.to_dict() if hasattr(tx_response, "to_dict") else tx_response
                     transactions = tx_data.get("transactions", [])
                     
                     for tx in transactions:
-                        # Identify staking reward items handed out by Coinbase
                         tx_type = tx.get("type", "").upper()
                         if tx_type in ["STAKING_REWARD", "STAKING_PAYOUT", "REWARD"]:
                             amount_block = tx.get("amount", {})
@@ -58,7 +72,7 @@ def fetch_auto_staking_rewards():
                             except (ValueError, TypeError):
                                 pass
                 except Exception:
-                    pass # Silently proceed if individual ledger channel times out
+                    pass
                     
     except Exception as e:
         print(f"⚠️ Warning: Could not auto-fetch rewards history ({e}). Using baseline data.")
@@ -81,7 +95,6 @@ def main_verification_loop():
     """Aggregates purchases, checks transaction registries for rewards, and pairs with costs."""
     print("🔄 Connecting to Coinbase API and analyzing ledger for rewards...")
     
-    # 1. Fetch any liquid trading balances (like your fluid BTC fraction)
     try:
         response = client.get_accounts(limit=250)
         data = response.to_dict() if hasattr(response, "to_dict") else (response if isinstance(response, dict) else {})
@@ -90,8 +103,10 @@ def main_verification_loop():
         print(f"❌ API Failure: {e}")
         return
 
-    # 2. Get the auto-updating sum of your earned staking rewards
     live_rewards = fetch_auto_staking_rewards()
+    
+    # NEW: Fetch your hidden staked Solana balance directly from the Earn ledger
+    staked_solana = fetch_staked_solana_balance()
 
     print("\n==========================================================")
     print("             VERIFIED REAL-TIME TOTAL BALANCES            ")
@@ -101,30 +116,26 @@ def main_verification_loop():
     total_portfolio_cost = 0.0
 
     for token in sorted(BASE_PURCHASE_AMOUNTS.keys()):
-        # Calculate Total Balance = (Initial Staked/Bought) + (API Liquid Balance) + (Auto-Discovered Rewards)
         initial_base = BASE_PURCHASE_AMOUNTS.get(token, 0.0)
         earned_rewards = live_rewards.get(token, 0.0)
         
-        # Read available AND held (staked) wallet fractions on the exchange layer
         liquid_exchange_wallet = 0.0
         for acc in accounts:
             currency_ticker = str(acc.get("currency", "")).upper().strip()
-            
-            # Using 'in' captures staking sub-wallets (e.g. matching "SOL" to "SOL" and "AT_SOL")
             if token in currency_ticker:
                 try:
                     available = float(acc.get("available_balance", {}).get("value", "0"))
                     held = float(acc.get("hold", {}).get("value", "0"))
-                    
-                    # Accumulate balances if Coinbase presents them across multiple wallet objects
                     liquid_exchange_wallet += (available + held)
                 except:
                     pass
         
-        # Consolidate everything together dynamically
+        # Consolidate balances dynamically
         if token == "BTC":
-            # For BTC, rely on what the exchange reads since it isn't staking
             total_balance = liquid_exchange_wallet if liquid_exchange_wallet > 0 else initial_base
+        elif token == "SOL":
+            # For SOL, explicitly add the hidden vault balance found in the Earn API
+            total_balance = initial_base + earned_rewards + liquid_exchange_wallet + staked_solana
         else:
             total_balance = initial_base + earned_rewards + liquid_exchange_wallet
 
@@ -133,7 +144,7 @@ def main_verification_loop():
         
         # Financial Computations
         current_value = total_balance * live_spot_price
-        initial_cost = initial_base * avg_buy  # Cost stays tied to your actual fiat out-of-pocket
+        initial_cost = initial_base * avg_buy
         net_profit = current_value - initial_cost
         
         total_portfolio_value += current_value
@@ -141,6 +152,8 @@ def main_verification_loop():
 
         # Display matrix formatting
         print(f"• {token:<4} Total Amount: {total_balance:.8f}")
+        if token == "SOL" and staked_solana > 0:
+            print(f"       [Detected +{staked_solana:.8f} SOL inside Coinbase Staking Vault]")
         if earned_rewards > 0:
             print(f"       [Includes +{earned_rewards:.8f} {token} Auto-Updated Rewards]")
             
