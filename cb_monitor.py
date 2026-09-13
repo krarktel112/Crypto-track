@@ -20,7 +20,7 @@ BASE_PURCHASE_AMOUNTS = {
 AVERAGE_PRICES = {
     "BTC": 0.01,  # Example: Change to your exact average entry cost
     "ETH": 0.0,   # Example: Change to your exact average entry cost
-    "SOL": 87.35     # Example: Change to your exact average entry cost
+    "SOL": 87.35  # Example: Change to your exact average entry cost
 }
 
 def fetch_auto_staking_rewards():
@@ -102,15 +102,18 @@ def main_verification_loop():
 
     for token in sorted(BASE_PURCHASE_AMOUNTS.keys()):
         # Calculate Total Balance = (Initial Staked/Bought) + (API Liquid Balance) + (Auto-Discovered Rewards)
-        initial_base = BASE_PURCHASE_AMOUTNS = BASE_PURCHASE_AMOUNTS.get(token, 0.0)
+        initial_base = BASE_PURCHASE_AMOUNTS.get(token, 0.0)
         earned_rewards = live_rewards.get(token, 0.0)
         
-        # Read liquid wallet fraction if any exists on the exchange layer
+        # Read available AND held (staked) wallet fractions on the exchange layer
         liquid_exchange_wallet = 0.0
         for acc in accounts:
             if str(acc.get("currency", "")).upper().strip() == token:
                 try:
-                    liquid_exchange_wallet = float(acc.get("available_balance", {}).get("value", "0"))
+                    available = float(acc.get("available_balance", {}).get("value", "0"))
+                    held = float(acc.get("hold", {}).get("value", "0"))
+                    # Staked assets live inside 'hold', so we must combine both fields
+                    liquid_exchange_wallet = available + held
                 except:
                     pass
         
