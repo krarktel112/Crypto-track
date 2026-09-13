@@ -108,12 +108,16 @@ def main_verification_loop():
         # Read available AND held (staked) wallet fractions on the exchange layer
         liquid_exchange_wallet = 0.0
         for acc in accounts:
-            if str(acc.get("currency", "")).upper().strip() == token:
+            currency_ticker = str(acc.get("currency", "")).upper().strip()
+            
+            # Using 'in' captures staking sub-wallets (e.g. matching "SOL" to "SOL" and "AT_SOL")
+            if token in currency_ticker:
                 try:
                     available = float(acc.get("available_balance", {}).get("value", "0"))
                     held = float(acc.get("hold", {}).get("value", "0"))
-                    # Staked assets live inside 'hold', so we must combine both fields
-                    liquid_exchange_wallet = available + held
+                    
+                    # Accumulate balances if Coinbase presents them across multiple wallet objects
+                    liquid_exchange_wallet += (available + held)
                 except:
                     pass
         
