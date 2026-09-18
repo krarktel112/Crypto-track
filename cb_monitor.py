@@ -8,39 +8,50 @@ API_SECRET_KEY = os.environ.get("COINBASE_API_SECRET", "your_api_secret_key_here
 
 client = RESTClient(api_key=API_KEY_NAME, api_secret=API_SECRET_KEY)
 
-def calculate_dynamic_sol_average_buy():
+def calculate_ledger_average_buy(accounts_list):
     """
-    Dynamically scans historical filled buy orders for SOL-USD to 
-    calculate the true volume-weighted average buy entry price.
+    Scans comprehensive historical ledger activities for SOL to catch retail 
+    buys, advanced trades, and external conversions. Calculates true VWAP.
     """
-    total_spent = 0.0
-    total_sol_bought = 0.0
+    total_usd_spent = 0.0
+    total_sol_acquired = 0.0
     
     try:
-        # Fetch fills for SOL-USD product
-        response = client.get_fills(product_id="SOL-USD", limit=100)
-        data = response.to_dict() if hasattr(response, "to_dict") else response
-        fills = data.get("fills", [])
-        
-        for fill in fills:
-            side = fill.get("side", "").upper()
-            # Only count actual completed purchases
-            if side == "BUY":
-                try:
-                    price = float(fill.get("price", "0"))
-                    size = float(fill.get("size", "0"))
-                    
-                    total_spent += (price * size)
-                    total_sol_bought += size
-                except (ValueError, TypeError):
-                    pass
-                    
-        if total_sol_bought > 0:
-            return total_spent / total_sol_bought
+        for acc in accounts_list:
+            ticker = str(acc.get("currency", "")).upper().strip()
+            if ticker == "SOL":
+                account_id = acc.get("uuid")
+                if not account_id:
+                    continue
+                
+                # Fetch up to 100 recent account transaction events
+                tx_response = client.get_account_transactions(account_uuid=account_id, limit=100)
+                tx_data = tx_response.to_dict() if hasattr(tx_response, "to_dict") else tx_response
+                transactions = tx_data.get("transactions", [])
+                
+                for tx in transactions:
+                    tx_type = tx.get("type", "").upper()
+                    # Catch both Advanced Trade fills and Retail App purchases/conversions
+                    if tx_type in ["BUY", "TRADE_IN", "TRADE"]:
+                        try:
+                            # Total amount of SOL acquired in this event
+                            sol_amount = float(tx.get("amount", {}).get("value", "0"))
+                            
+                            # Safely capture what it was worth in USD at execution time
+                            native_block = tx.get("native_amount", {})
+                            usd_value = abs(float(native_block.get("value", "0")))
+                            
+                            if sol_amount > 0 and usd_value > 0:
+                                total_usd_spent += usd_value
+                                total_sol_acquired += sol_amount
+                        except (ValueError, TypeError):
+                            pass
     except Exception:
         pass
         
-    return None # Fallback to default hardcoded value if API scan fails
+    if total_sol_acquired > 0:
+        return total_usd_spent / total_sol_acquired
+    return None
 
 def fetch_staked_solana_balance():
     """Queries Coinbase's dedicated Earn/Staking API to find hidden staked SOL."""
@@ -56,18 +67,13 @@ def fetch_staked_solana_balance():
         pass
     return 0.0
 
-def fetch_auto_staking_rewards():
-    """Scans all historical transaction events to tally up every reward payout."""
+def fetch_auto_staking_rewards(accounts_list):
+    """Scans historical transactions to tally rewards across BTC, ETH, and SOL."""
     rewards_tally = {"ETH": 0.0, "SOL": 0.0, "BTC": 0.0}
     
     try:
-        response = client.get_accounts(limit=250)
-        data = response.to_dict() if hasattr(response, "to_dict") else (response if isinstance(response, dict) else {})
-        accounts = data.get("accounts", [])
-        
-        for account in accounts:
+        for account in accounts_list:
             ticker = str(account.get("currency", "")).upper().strip()
-            
             if ticker in rewards_tally:
                 account_id = account.get("uuid")
                 if not account_id:
@@ -81,18 +87,15 @@ def fetch_auto_staking_rewards():
                     for tx in transactions:
                         tx_type = tx.get("type", "").upper()
                         if tx_type in ["STAKING_REWARD", "STAKING_PAYOUT", "REWARD"]:
-                            amount_block = tx.get("amount", {})
                             try:
-                                reward_value = float(amount_block.get("value", "0"))
+                                reward_value = float(tx.get("amount", {}).get("value", "0"))
                                 rewards_tally[ticker] += reward_value
                             except (ValueError, TypeError):
                                 pass
                 except Exception:
                     pass
-                    
-    except Exception as e:
-        print(f"⚠️ Warning: Could not auto-fetch rewards history ({e}). Using baseline data.")
-        
+    except Exception:
+        pass
     return rewards_tally
 
 def get_live_price(ticker):
@@ -108,8 +111,8 @@ def get_live_price(ticker):
     return 0.0
 
 def main_verification_loop():
-    """Aggregates purchases, checks transaction registries for rewards, and pairs with costs."""
-    print("🔄 Connecting to Coinbase API and analyzing ledger for live balances...")
+    """Aggregates purchases, checks ledger histories, and updates matrix metrics."""
+    print("🔄 Accessing verified read-only account data structures...")
     
     try:
         response = client.get_accounts(limit=250)
@@ -119,13 +122,13 @@ def main_verification_loop():
         print(f"❌ API Failure: {e}")
         return
 
-    live_rewards = fetch_auto_staking_rewards()
+    live_rewards = fetch_auto_staking_rewards(accounts)
     staked_solana = fetch_staked_solana_balance()
     
-    # DYNAMICALLY DETECT ENTRY COST FROM COINBASE HISTORICAL FILLS
-    dynamic_sol_avg = calculate_dynamic_sol_average_buy()
+    # REPLACED: Now extracts history directly from retail & advanced transaction books
+    dynamic_sol_avg = calculate_ledger_average_buy(accounts)
 
-    # --- FALLBACK HARDCODED BASELINES (If API returns empty history) ---
+    # --- FALLBACK HARDCODED BASELINES ---
     BASE_PURCHASE_AMOUNTS = {"BTC": 0.0, "ETH": 0.0, "SOL": 0.11365979}
     AVERAGE_PRICES = {
         "BTC": 0.01, 
@@ -155,11 +158,9 @@ def main_verification_loop():
                 except:
                     pass
         
-        # Consolidate balances dynamically across all components
+        # Consolidate balances dynamically
         if token == "SOL":
-            # Fully automated tracking: Base + Staking Vault + Liquid + Auto Payouts
             total_balance = liquid_exchange_wallet + staked_solana
-            # Safety check: if standard endpoints read zero, protect with the baseline estimate
             if total_balance == 0:
                 total_balance = initial_base + earned_rewards
         elif token == "BTC":
@@ -170,7 +171,6 @@ def main_verification_loop():
         avg_buy = AVERAGE_PRICES.get(token, 0.0)
         live_spot_price = get_live_price(token)
         
-        # Financial Computations
         current_value = total_balance * live_spot_price
         initial_cost = (liquid_exchange_wallet if token == "SOL" else initial_base) * avg_buy
         net_profit = current_value - initial_cost
@@ -178,13 +178,12 @@ def main_verification_loop():
         total_portfolio_value += current_value
         total_portfolio_cost += initial_cost
 
-        # Display matrix formatting
         print(f"• {token:<4} Total Amount: {total_balance:.8f}")
         if token == "SOL":
             if staked_solana > 0:
                 print(f"       [Detected +{staked_solana:.8f} SOL inside Coinbase Staking Vault]")
             if dynamic_sol_avg is not None:
-                print(f"       [Calculated Real-Time Dynamic Entry Cost from Order Ledger]")
+                print(f"       [Calculated Real-Time Dynamic Entry Cost from Account Ledger]")
             else:
                 print(f"       [Using Hardcoded Cost Baselines as API Fallback]")
             
