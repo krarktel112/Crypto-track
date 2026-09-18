@@ -13,14 +13,14 @@ client = RESTClient(api_key=API_KEY_NAME, api_secret=API_SECRET_KEY)
 BASE_PURCHASE_AMOUNTS = {
     "BTC": 0.00000000, 
     "ETH": 0.00000000, 
-    "SOL": 0.11361177
+    "SOL": 0.113659785
 }
 
 # --- 2. SET YOUR FIXED HARDCODED AVERAGE BUY COSTS ---
 AVERAGE_PRICES = {
     "BTC": 0.01,  # Example: Change to your exact average entry cost
     "ETH": 0.0,   # Example: Change to your exact average entry cost
-    "SOL": 87.35  # Example: Change to your exact average entry cost
+    "SOL": 87.37  # Example: Change to your exact average entry cost
 }
 
 def fetch_staked_solana_balance():
