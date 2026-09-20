@@ -90,7 +90,7 @@ def main_verification_loop():
                 
             avg_buy = FALLBACK_SOL_AVG_BUY
         elif token == "BTC":
-            total_balance = liquid_exchange_wallet if liquid_exchange_wallet > 0 else 0.00000989
+            total_balance = liquid_exchange_wallet if liquid_exchange_wallet > 0 else 0.00000000
             avg_buy = 0.01
         else: # ETH
             total_balance = liquid_exchange_wallet if liquid_exchange_wallet > 0 else 0.00000009
