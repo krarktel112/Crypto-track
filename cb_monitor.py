@@ -22,12 +22,6 @@ def fetch_staked_solana_balance():
         pass
     return 0.0
 
-def fetch_auto_staking_rewards(accounts_list):
-    """Scans historical transaction structures to count cumulative rewards securely."""
-    rewards_tally = {"ETH": 0.0, "SOL": 0.0, "BTC": 0.0}
-    # Handled inside staking data arrays directly if main account has zero liquidity
-    return rewards_tally
-
 def get_live_price(ticker):
     """Fetches real-time spot market pricing directly from Coinbase SDK."""
     try:
@@ -52,11 +46,9 @@ def main_verification_loop():
         print(f"❌ API Failure: {e}")
         return
 
-    # Direct query to the staking subsystem ledger where your actual funds live
     staked_solana = fetch_staked_solana_balance()
 
     # --- FULLY AUTOMATED PERFORMANCE TRACKING TARGETS ---
-    # Safe fallback levels ensure you never lose dashboard coverage due to account restructures
     HARDCODED_SOL_BASE_AMOUNT = 0.11365979
     FALLBACK_SOL_AVG_BUY = 87.37
 
@@ -66,9 +58,23 @@ def main_verification_loop():
 
     total_portfolio_value = 0.0
     total_portfolio_cost = 0.0
-
+    
+    # Target cash balances
+    cash_balances = {"USD": 0.0, "EUR": 0.0, "GBP": 0.0}
     tracked_tokens = ["BTC", "ETH", "SOL"]
 
+    # 1. Parse and extract fiat balances safely from the account data
+    for acc in accounts:
+        currency_ticker = str(acc.get("currency", "")).upper().strip()
+        if currency_ticker in cash_balances:
+            try:
+                available = float(acc.get("available_balance", {}).get("value", "0"))
+                held = float(acc.get("hold", {}).get("value", "0"))
+                cash_balances[currency_ticker] += (available + held)
+            except:
+                pass
+
+    # 2. Process Crypto Tokens
     for token in sorted(tracked_tokens):
         liquid_exchange_wallet = 0.0
         for acc in accounts:
@@ -81,13 +87,10 @@ def main_verification_loop():
                 except:
                     pass
         
-        # Consolidate Live Balances dynamically across active products
         if token == "SOL":
-            # If the Staking API returns your balance, use it. Otherwise, use your backup baseline.
             total_balance = staked_solana if staked_solana > 0 else liquid_exchange_wallet
             if total_balance == 0:
                 total_balance = HARDCODED_SOL_BASE_AMOUNT
-                
             avg_buy = FALLBACK_SOL_AVG_BUY
         elif token == "BTC":
             total_balance = liquid_exchange_wallet if liquid_exchange_wallet > 0 else 0.00000000
@@ -104,7 +107,6 @@ def main_verification_loop():
         total_portfolio_value += current_value
         total_portfolio_cost += initial_cost
 
-        # Matrix output styling
         print(f"• {token:<4} Total Amount: {total_balance:.8f}")
         if token == "SOL":
             if staked_solana > 0:
@@ -119,6 +121,32 @@ def main_verification_loop():
             status = "🟢 PROFIT" if net_profit >= 0 else "🔴 LOSS"
             print(f"       Net Return:    ${net_profit:+,.2f} [{status}]")
         print("-" * 50)
+
+    # 3. Process and Print Fiat Cash Balances
+    has_cash = False
+    for fiat, amount in cash_balances.items():
+        if amount > 0:
+            if not has_cash:
+                print("                     FIAT CASH BALANCES                   ")
+                print("-" * 50)
+                has_cash = True
+            
+            # Convert non-USD cash balances to USD value using the price fetcher
+            if fiat != "USD":
+                conversion_rate = get_live_price(fiat)
+                # If conversion endpoint fails, fallback to standard baseline rates
+                if conversion_rate == 0.0:
+                    conversion_rate = 1.06 if fiat == "EUR" else 1.25 
+                usd_value = amount * conversion_rate
+            else:
+                usd_value = amount
+
+            total_portfolio_value += usd_value 
+            
+            # Print currency symbol appropriately
+            symbol = "£" if fiat == "GBP" else ("€" if fiat == "EUR" else "$")
+            print(f"• {fiat:<4} Total Cash:   {symbol}{amount:,.2f} (Value: ${usd_value:,.2f})")
+            print("-" * 50)
 
     print("==========================================================")
     print(f"TOTAL PORTFOLIO VALUE: ${total_portfolio_value:,.2f}")
