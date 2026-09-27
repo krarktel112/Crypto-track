@@ -61,7 +61,7 @@ def main_verification_loop():
     
     # Target cash balances
     cash_balances = {"USD": 0.0, "EUR": 0.0, "GBP": 0.0}
-    tracked_tokens = ["BTC", "ETH", "SOL"]
+    tracked_tokens = ["BTC", "ETH", "SOL", "ATOM"]
 
     # 1. Parse and extract fiat balances safely from the account data
     for acc in accounts:
