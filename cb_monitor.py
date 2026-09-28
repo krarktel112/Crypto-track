@@ -1,5 +1,6 @@
 import os
 import time
+import json
 from coinbase.rest import RESTClient
 
 # Initialize the secure client
@@ -8,26 +9,42 @@ API_SECRET_KEY = os.environ.get("COINBASE_API_SECRET", "your_api_secret_key_here
 
 client = RESTClient(api_key=API_KEY_NAME, api_secret=API_SECRET_KEY)
 
+# Flag to prevent spamming the debug file write loop
+DEBUG_LOGGED = False
+
 def fetch_staked_balance(ticker):
-    """Queries Coinbase's dedicated Earn/Staking API with substring matching to trap custom vault strings."""
+    """Queries Coinbase's dedicated Earn/Staking API with a dynamic structural debugger."""
+    global DEBUG_LOGGED
     try:
         response = client.get_staking_balances()
         data = response.to_dict() if hasattr(response, "to_dict") else response
-        balances = data.get("balances", [])
+        
+        # --- STRUCTURAL LEDGER DEBUGGER ---
+        if not DEBUG_LOGGED:
+            try:
+                with open("staking_debug.txt", "w") as f:
+                    f.write(json.dumps(data, indent=4))
+                DEBUG_LOGGED = True
+            except:
+                pass
+        # ----------------------------------
+
+        balances = data.get("balances", []) if isinstance(data, dict) else []
         
         for bal in balances:
             currency_raw = str(bal.get("currency", "")).upper().strip()
             target = ticker.upper().strip()
             
-            # Traps standard (ATOM), legacy variants (ATOM2), and vault strings (ATOM-STV)
+            # Universal substring lookup variant mapping
             if target in currency_raw or currency_raw in target:
-                amount_val = float(bal.get("amount", {}).get("value", "0"))
-                if amount_val > 0:
-                    return amount_val
+                # Safely extract amounts across nested dictionary nodes
+                amount_node = bal.get("amount", {})
+                if isinstance(amount_node, dict):
+                    return float(amount_node.get("value", "0"))
+                return float(amount_node)
     except Exception:
         pass
     return 0.0
-
 
 def get_live_price(ticker):
     """Fetches real-time spot market pricing directly from Coinbase SDK."""
@@ -104,10 +121,9 @@ def main_verification_loop():
             avg_buy = FALLBACK_SOL_AVG_BUY
         elif token == "ATOM":
             total_balance = staked_atom if staked_atom > 0 else liquid_exchange_wallet
-            # Fallback constraint to ensure micro-dust doesn't zero out completely if endpoint drops
             if total_balance == 0:
                 total_balance = 0.00000009
-            avg_buy = 0.00  # Adjust your ATOM cost basis here if needed
+            avg_buy = 0.00  
         elif token == "BTC":
             total_balance = liquid_exchange_wallet if liquid_exchange_wallet > 0 else 0.00000000
             avg_buy = 0.01
