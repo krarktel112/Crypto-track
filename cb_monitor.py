@@ -9,18 +9,25 @@ API_SECRET_KEY = os.environ.get("COINBASE_API_SECRET", "your_api_secret_key_here
 client = RESTClient(api_key=API_KEY_NAME, api_secret=API_SECRET_KEY)
 
 def fetch_staked_balance(ticker):
-    """Queries Coinbase's dedicated Earn/Staking API to find locked staking assets for a given ticker."""
+    """Queries Coinbase's dedicated Earn/Staking API with substring matching to trap custom vault strings."""
     try:
         response = client.get_staking_balances()
         data = response.to_dict() if hasattr(response, "to_dict") else response
         balances = data.get("balances", [])
         
         for bal in balances:
-            if str(bal.get("currency", "")).upper().strip() == ticker.upper().strip():
-                return float(bal.get("amount", {}).get("value", "0"))
+            currency_raw = str(bal.get("currency", "")).upper().strip()
+            target = ticker.upper().strip()
+            
+            # Traps standard (ATOM), legacy variants (ATOM2), and vault strings (ATOM-STV)
+            if target in currency_raw or currency_raw in target:
+                amount_val = float(bal.get("amount", {}).get("value", "0"))
+                if amount_val > 0:
+                    return amount_val
     except Exception:
         pass
     return 0.0
+
 
 def get_live_price(ticker):
     """Fetches real-time spot market pricing directly from Coinbase SDK."""
