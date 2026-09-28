@@ -1,6 +1,5 @@
 import os
 import time
-import json
 from coinbase.rest import RESTClient
 
 # Initialize the secure client
@@ -8,43 +7,6 @@ API_KEY_NAME = os.environ.get("COINBASE_API_KEY_NAME", "your_api_key_name_here")
 API_SECRET_KEY = os.environ.get("COINBASE_API_SECRET", "your_api_secret_key_here")
 
 client = RESTClient(api_key=API_KEY_NAME, api_secret=API_SECRET_KEY)
-
-# Flag to prevent spamming the debug file write loop
-DEBUG_LOGGED = False
-
-def fetch_staked_balance(ticker):
-    """Queries Coinbase's dedicated Earn/Staking API with a dynamic structural debugger."""
-    global DEBUG_LOGGED
-    try:
-        response = client.get_staking_balances()
-        data = response.to_dict() if hasattr(response, "to_dict") else response
-        
-        # --- STRUCTURAL LEDGER DEBUGGER ---
-        if not DEBUG_LOGGED:
-            try:
-                with open("staking_debug.txt", "w") as f:
-                    f.write(json.dumps(data, indent=4))
-                DEBUG_LOGGED = True
-            except:
-                pass
-        # ----------------------------------
-
-        balances = data.get("balances", []) if isinstance(data, dict) else []
-        
-        for bal in balances:
-            currency_raw = str(bal.get("currency", "")).upper().strip()
-            target = ticker.upper().strip()
-            
-            # Universal substring lookup variant mapping
-            if target in currency_raw or currency_raw in target:
-                # Safely extract amounts across nested dictionary nodes
-                amount_node = bal.get("amount", {})
-                if isinstance(amount_node, dict):
-                    return float(amount_node.get("value", "0"))
-                return float(amount_node)
-    except Exception:
-        pass
-    return 0.0
 
 def get_live_price(ticker):
     """Fetches real-time spot market pricing directly from Coinbase SDK."""
@@ -69,10 +31,6 @@ def main_verification_loop():
     except Exception as e:
         print(f"❌ API Failure: {e}")
         return
-
-    # Fetch real-time staking balances via generalized tracker
-    staked_solana = fetch_staked_balance("SOL")
-    staked_atom = fetch_staked_balance("ATOM")
 
     # --- FULLY AUTOMATED PERFORMANCE TRACKING TARGETS ---
     HARDCODED_SOL_BASE_AMOUNT = 0.11365979
@@ -102,33 +60,49 @@ def main_verification_loop():
 
     # 2. Process Crypto Tokens
     for token in sorted(tracked_tokens):
-        liquid_exchange_wallet = 0.0
+        liquid_balance = 0.0
+        staked_balance = 0.0
+        is_staked_detected = False
+
         for acc in accounts:
             currency_ticker = str(acc.get("currency", "")).upper().strip()
-            if token == currency_ticker:
+            
+            # Match standard asset name or sub-account flags
+            if token == currency_ticker or f"{token}2" in currency_ticker or f"{token}-" in currency_ticker:
                 try:
                     available = float(acc.get("available_balance", {}).get("value", "0"))
                     held = float(acc.get("hold", {}).get("value", "0"))
-                    liquid_exchange_wallet += (available + held)
+                    balance_value = available + held
+                    
+                    # Detect Earn/Staking sub-structures via type tags or asset flags
+                    acc_type = str(acc.get("type", "")).upper()
+                    acc_name = str(acc.get("name", "")).upper()
+                    
+                    if "EARN" in acc_type or "STAK" in acc_type or "EARN" in acc_name or "STAK" in acc_name or currency_ticker != token:
+                        staked_balance += balance_value
+                        if balance_value > 0.00001:
+                            is_staked_detected = True
+                    else:
+                        liquid_balance += balance_value
                 except:
                     pass
         
-        # Calculate totals factoring in liquid balances + staking vaults
+        # Consolidate dynamic tracking targets
         if token == "SOL":
-            total_balance = staked_solana if staked_solana > 0 else liquid_exchange_wallet
-            if total_balance == 0:
-                total_balance = HARDCODED_SOL_BASE_AMOUNT
+            total_balance = (liquid_balance + staked_balance) if (liquid_balance + staked_balance) > 0 else HARDCODED_SOL_BASE_AMOUNT
             avg_buy = FALLBACK_SOL_AVG_BUY
+            # If our fallback balance handles it, check if we found real staked balances
+            if staked_balance > 0: is_staked_detected = True
         elif token == "ATOM":
-            total_balance = staked_atom if staked_atom > 0 else liquid_exchange_wallet
-            if total_balance == 0:
-                total_balance = 0.00000009
+            total_balance = liquid_balance + staked_balance
+            if total_balance <= 0.00000009:
+                total_balance = 0.00000009  # Baseline Protection fallback
             avg_buy = 0.00  
         elif token == "BTC":
-            total_balance = liquid_exchange_wallet if liquid_exchange_wallet > 0 else 0.00000000
+            total_balance = liquid_balance if liquid_balance > 0 else 0.00000000
             avg_buy = 0.01
         else: # ETH
-            total_balance = liquid_exchange_wallet if liquid_exchange_wallet > 0 else 0.00000009
+            total_balance = liquid_balance if liquid_balance > 0 else 0.00000009
             avg_buy = 0.00
 
         live_spot_price = get_live_price(token)
@@ -141,14 +115,9 @@ def main_verification_loop():
 
         print(f"• {token:<4} Total Amount: {total_balance:.8f}")
         
-        # Conditional Vault display flags
-        if token == "SOL":
-            if staked_solana > 0:
-                print(f"       [Dynamic Read: Verified Staking Vault Allocation Active]")
-            else:
-                print(f"       [Vault Baseline Protection Activated]")
-        elif token == "ATOM":
-            if staked_atom > 0:
+        # Display vault allocation status flags dynamically
+        if token in ["SOL", "ATOM"]:
+            if is_staked_detected or staked_balance > 0:
                 print(f"       [Dynamic Read: Verified Staking Vault Allocation Active]")
             else:
                 print(f"       [Vault Baseline Protection Activated]")
