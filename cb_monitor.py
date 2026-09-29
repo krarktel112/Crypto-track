@@ -22,7 +22,7 @@ def load_local_portfolio_state():
     """Reads the last cached balance sheet structure from local storage to survive Termux crashes."""
     defaults = {
         "SOL": {"balance": 0.11375847, "avg_buy": 87.37},
-        "ATOM": {"balance": 0.79890200, "avg_buy": 4.50},
+        "ATOM": {"balance": 0.79890200, "avg_buy": 1.84},
         "BTC": {"balance": 0.00000000, "avg_buy": 0.01},
         "ETH": {"balance": 0.00000000, "avg_buy": 0.00}
     }
