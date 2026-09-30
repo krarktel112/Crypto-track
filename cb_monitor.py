@@ -22,10 +22,10 @@ STATE_FILE = "portfolio_state.json"
 def load_local_portfolio_state():
     """Reads the last cached balance sheet structure from local storage to survive Termux crashes."""
     defaults = {
-        "SOL": {"balance": 0.11375847, "avg_buy": 87.37},
-        "ATOM": {"balance": 0.79890200, "avg_buy": 4.50},
+        "SOL": {"balance": 0.113758467, "avg_buy": 87.40},
+        "ATOM": {"balance": 0.991553, "avg_buy": 1.82},
         "BTC": {"balance": 0.00000000, "avg_buy": 0.01},
-        "ETH": {"balance": 0.00000000, "avg_buy": 0.00}
+        "ETH": {"balance": 0.00000000, "avg_buy": 0.01}
     }
     if os.path.exists(STATE_FILE):
         try:
