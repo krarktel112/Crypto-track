@@ -8,12 +8,13 @@ from email.header import decode_header
 from coinbase.rest import RESTClient
 
 # --- SECURE CREDENTIAL ARRAYS ---
+# These pull securely from your Termux environment variables (.bashrc profiles)
 API_KEY_NAME = os.environ.get("COINBASE_API_KEY_NAME", "your_api_key_name_here")
 API_SECRET_KEY = os.environ.get("COINBASE_API_SECRET", "your_api_secret_key_here")
 
-# For email tracking (Generate a 16-character App Password inside Gmail Security Settings)
-GMAIL_USER = os.environ.get("GMAIL_EMAIL_ADDRESS", "your_email@gmail.com")
-GMAIL_PASS = os.environ.get("GMAIL_APP_PASSWORD", "your_gmail_app_password")
+# Pulls your Yahoo email address and 16-character App Password securely
+YAHOO_USER = os.environ.get("YAHOO_EMAIL_ADDRESS", "your_email@yahoo.com")
+YAHOO_PASS = os.environ.get("YAHOO_APP_PASSWORD", "your_yahoo_app_password")
 
 client = RESTClient(api_key=API_KEY_NAME, api_secret=API_SECRET_KEY)
 STATE_FILE = "portfolio_state.json"
@@ -22,7 +23,7 @@ def load_local_portfolio_state():
     """Reads the last cached balance sheet structure from local storage to survive Termux crashes."""
     defaults = {
         "SOL": {"balance": 0.11375847, "avg_buy": 87.37},
-        "ATOM": {"balance": 0.79890200, "avg_buy": 1.84},
+        "ATOM": {"balance": 0.79890200, "avg_buy": 4.50},
         "BTC": {"balance": 0.00000000, "avg_buy": 0.01},
         "ETH": {"balance": 0.00000000, "avg_buy": 0.00}
     }
@@ -42,29 +43,30 @@ def save_local_portfolio_state(state):
     except:
         pass
 
-def scrape_gmail_transaction_updates(state):
-    """Logs into your Gmail profile via secure IMAP to scan and pull recent balance modifications."""
-    if not GMAIL_PASS or "your_gmail" in GMAIL_PASS:
+def scrape_yahoo_transaction_updates(state):
+    """Logs into your Yahoo profile via secure IMAP to scan and pull recent balance modifications."""
+    if not YAHOO_PASS or "your_yahoo" in YAHOO_PASS:
         return state
 
     try:
-        mail = imaplib.IMAP4_SSL("://gmail.com")
-        mail.login(GMAIL_USER, GMAIL_PASS)
-        mail.select("inbox")
+        # Secure connection routing straight to Yahoo Mail infrastructure
+        mail = imaplib.IMAP4_SSL("://yahoo.com", 993)
+        mail.login(YAHOO_USER, YAHOO_PASS)
+        mail.select("Inbox")
 
-        # Scan for Coinbase specific account updates across the last 3 days
+        # Scan for Coinbase transaction notification messages
         status, messages = mail.search(None, '(FROM "no-reply@coinbase.com")')
         if status != "OK":
             return state
 
-        email_ids = messages[0].split()
+        email_ids = messages.split()
         # Only process the most recent 15 emails to optimize execution speed in Termux
         for e_id in email_ids[-15:]:
             res, msg_data = mail.fetch(e_id, "(RFC822)")
             for response_part in msg_data:
                 if isinstance(response_part, tuple):
-                    msg = email.message_from_bytes(response_part[1])
-                    subject, encoding = decode_header(msg["Subject"])[0]
+                    msg = email.message_from_bytes(response_part)
+                    subject, encoding = decode_header(msg["Subject"])
                     if isinstance(subject, bytes):
                         subject = subject.decode(encoding or "utf-8")
                     
@@ -75,9 +77,8 @@ def scrape_gmail_transaction_updates(state):
                         match = re.search(r"YOUR\s+([A-Z0-9]+)\s+IS\s+NOW\s+AVAILABLE", subject)
                         if match:
                             ticker = match.group(1)
-                            # Body parse would pull quantities, but standard verification marks active pools
                             if ticker in state and state[ticker]["balance"] == 0:
-                                state[ticker]["balance"] = 0.79890200 # Restores core context targets
+                                state[ticker]["balance"] = 0.79890200 
 
                     # 2. Parse Outright Sales Activity (e.g., "You've sold $21.98 of SOL")
                     elif "SOLD" in subject:
@@ -85,7 +86,6 @@ def scrape_gmail_transaction_updates(state):
                         if match:
                             ticker = match.group(1)
                             if ticker in state:
-                                # Safe truncation logic flag - adjusts values if active balances are registered
                                 if state[ticker]["balance"] > 0:
                                     state[ticker]["balance"] = 0.00000000
 
@@ -93,7 +93,6 @@ def scrape_gmail_transaction_updates(state):
                     elif "EARNING" in subject or "REWARD" in subject:
                         for token in ["SOL", "ATOM"]:
                             if token in subject:
-                                # Increments small staking fraction defaults automatically onto ledger positions
                                 state[token]["balance"] += 0.00000150 
         mail.logout()
     except Exception:
@@ -116,8 +115,8 @@ def main_verification_loop():
     """Aggregates balances combining liquid states, local cache maps, and email scraper records."""
     portfolio_state = load_local_portfolio_state()
     
-    # Run the automated scraper to catch manual modifications before printing values
-    portfolio_state = scrape_gmail_transaction_updates(portfolio_state)
+    # Run the Yahoo automated scraper to catch manual modifications before printing values
+    portfolio_state = scrape_yahoo_transaction_updates(portfolio_state)
     save_local_portfolio_state(portfolio_state)
 
     try:
@@ -159,7 +158,6 @@ def main_verification_loop():
                 except:
                     pass
         
-        # Merge local storage state data with liquid tracking variables
         stored_balance = portfolio_state[token]["balance"]
         total_balance = max(liquid_balance, stored_balance)
         avg_buy = portfolio_state[token]["avg_buy"]
