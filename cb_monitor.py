@@ -22,8 +22,8 @@ STATE_FILE = "portfolio_state.json"
 def load_local_portfolio_state():
     """Reads the last cached balance sheet structure from local storage to survive Termux crashes."""
     defaults = {
-        "SOL": {"balance": 0.1138645, "avg_buy": 87.40},
-        "ATOM": {"balance": 2.626201, "avg_buy": 1.75},
+        "SOL": {"balance": 0.113914741, "avg_buy": 87.40},
+        "ATOM": {"balance": 2.629693, "avg_buy": 1.75},
         "BTC": {"balance": 0.00000000, "avg_buy": 0.01},
         "ETH": {"balance": 0.00000009, "avg_buy": 0.01}
     }
@@ -171,10 +171,10 @@ def main_verification_loop():
         total_portfolio_cost += initial_cost
 
         print(f"• {token:<4} Total Amount: {total_balance:.8f}")
-        if token in ["SOL", "ATOM"] and total_balance > 0.0001:
-            print(f"       [Dynamic Read: Verified Staking Vault Allocation Active]")
-        else:
-            print(f"       [Vault Baseline Protection Activated]")
+        #if token in ["SOL", "ATOM"] and total_balance > 0.0001:
+            #print(f"       [Dynamic Read: Verified Staking Vault Allocation Active]")
+        #else:
+            #print(f"       [Vault Baseline Protection Activated]")
             
         print(f"       Avg Buy Price: ${avg_buy:,.2f} | Live Spot: ${live_spot_price:,.2f}")
         print(f"       Holding Value: ${current_value:,.2f}")
