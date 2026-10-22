@@ -42,7 +42,7 @@ def load_local_portfolio_state():
                         }
                     return flat_data
                 
-                # Filter out non-asset configurations (like banking_and_cashout)
+                # Filter out non-asset configurations (like banking_and_cashout or grid_trading)
                 crypto_assets = {}
                 for key, val in data.items():
                     if isinstance(val, dict) and "balance" in val:
@@ -63,7 +63,7 @@ def save_local_portfolio_state(state):
             except:
                 pass
 
-        # Update crypto token data while leaving banking configurations intact
+        # Update crypto token data while leaving non-asset configurations intact
         existing_data.update(state)
 
         with open(STATE_FILE, "w") as f:
@@ -231,12 +231,12 @@ def main_verification_loop():
         banking_engine.process_banking_logic()
     except Exception as e:
         print(f"⚠️ Banking Engine Execution Error: {e}\n")
+
     # --- EXECUTE GRID TRADING ENGINE ---
     try:
-        grid_engine.initialize_grid() # Or an execution function if you expand it to check fills
+        grid_engine.initialize_grid()
     except Exception as e:
         print(f"⚠️ Grid Engine Execution Error: {e}\n")
-
 
 if __name__ == "__main__":
     while True:
