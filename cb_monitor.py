@@ -4,6 +4,7 @@ import json
 import re
 import imaplib
 import email
+import banking_engine
 from email.header import decode_header
 from coinbase.rest import RESTClient
 
