@@ -6,9 +6,14 @@ def calculate_true_averages():
     with open(state_file, "r") as f:
         state = json.load(f)
         
+    # Support both nested "assets" key and flat top-level token keys
+    assets_data = state.get("assets", {})
+    if not assets_data:
+        assets_data = {k: v for k, v in state.items() if isinstance(v, dict) and "balance" in v}
+
     print("📊 --- True Cost-Basis & Asset Summary ---")
     
-    for token, details in state.get("assets", {}).items():
+    for token, details in assets_data.items():
         exchange_balance = details.get("balance", 0.0)
         exchange_avg_buy = details.get("avg_buy", 0.0)
         
@@ -16,9 +21,7 @@ def calculate_true_averages():
         ext_units = ext.get("total_units", 0.0)
         ext_usd = ext.get("total_usd_spent", 0.0)
         
-        # Calculate exchange-side spent USD estimate
         exchange_usd_spent = exchange_balance * exchange_avg_buy
-        
         total_units = exchange_balance + ext_units
         total_usd_spent = exchange_usd_spent + ext_usd
         
