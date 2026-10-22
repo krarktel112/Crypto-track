@@ -30,6 +30,7 @@ def load_local_portfolio_state():
         try:
             with open(STATE_FILE, "r") as f:
                 data = json.load(f)
+                
                 # Handle nested assets key if present, otherwise handle flat dict
                 if "assets" in data:
                     flat_data = {}
@@ -39,7 +40,13 @@ def load_local_portfolio_state():
                             "avg_buy": details.get("avg_buy", 0.0)
                         }
                     return flat_data
-                return data
+                
+                # Filter out non-asset metadata dictionaries like banking config
+                crypto_assets = {}
+                for key, val in data.items():
+                    if isinstance(val, dict) and "balance" in val:
+                        crypto_assets[key] = val
+                return crypto_assets if crypto_assets else defaults
         except:
             pass
     return defaults
@@ -47,9 +54,20 @@ def load_local_portfolio_state():
 def save_local_portfolio_state(state):
     """Saves active balance changes locally so you never have to adjust code files."""
     try:
-        # Save back maintaining the standard flat format expected by cb_monitor.py
+        # Load existing file first to preserve non-asset structures like banking_and_cashout
+        existing_data = {}
+        if os.path.exists(STATE_FILE):
+            try:
+                with open(STATE_FILE, "r") as f:
+                    existing_data = json.load(f)
+            except:
+                pass
+
+        # Update crypto token data while preserving banking settings
+        existing_data.update(state)
+
         with open(STATE_FILE, "w") as f:
-            json.dump(state, f, indent=4)
+            json.dump(existing_data, f, indent=4)
     except:
         pass
 
@@ -207,6 +225,12 @@ def main_verification_loop():
         summary_status = "🟢 NET GAIN" if total_return >= 0 else "🔴 NET LOSS"
         print(f"TOTAL NET PERFORMANCE: ${total_return:+,.2f} [{summary_status}]")
     print("==========================================================\n")
+
+    # --- EXECUTE BANKING MODULE ---
+    try:
+        banking_engine.process_banking_logic()
+    except Exception as e:
+        print(f"⚠️ Banking Engine Execution Error: {e}\n")
 
 if __name__ == "__main__":
     while True:
