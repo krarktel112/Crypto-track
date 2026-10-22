@@ -17,57 +17,46 @@ YAHOO_PASS = os.environ.get("YAHOO_APP_PASSWORD", "your_yahoo_app_password")
 client = RESTClient(api_key=API_KEY_NAME, api_secret=API_SECRET_KEY)
 STATE_FILE = "portfolio_state.json"
 
-DEFAULT_SCHEMA = {
-    "assets": {
-        "SOL": {"balance": 0.118359694, "avg_buy": 88.07, "external_purchases": {"total_units": 0.0, "total_usd_spent": 0.0}},
-        "ATOM": {"balance": 4.720473, "avg_buy": 1.72, "external_purchases": {"total_units": 0.0, "total_usd_spent": 0.0}},
-        "BTC": {"balance": 0.0, "avg_buy": 0.01, "external_purchases": {"total_units": 0.05, "total_usd_spent": 3200.0, "note": "Hardware DCA & non-cloud buys"}},
-        "ETH": {"balance": 9e-08, "avg_buy": 0.01, "external_purchases": {"total_units": 0.0, "total_usd_spent": 0.0}}
-    },
-    "grid_trading": {
-        "active_pair": "BTC-USD",
-        "lower_bound": 55000.0,
-        "upper_bound": 75000.0,
-        "grid_levels": 10,
-        "amount_per_grid_usd": 25.0,
-        "open_orders": []
-    },
-    "banking_and_cashout": {
-        "target_cash_reserve_usd": 100.0,
-        "auto_withdraw_threshold_usd": 500.0,
-        "accumulated_profit_usd": 0.0,
-        "payout_method_id": "ACH_LINKED_BANK_ID_OR_NAME"
-    },
-    "market_logic": {
-        "moving_averages": {"BTC_50_ma": 0.0, "BTC_200_ma": 0.0},
-        "indicators": {"btc_dominance": 58.2, "altseason_trigger": False},
-        "cooldowns": {"last_trade_timestamp": 0, "cooldown_seconds": 300}
-    }
-}
-
 def load_local_portfolio_state():
+    """Reads the last cached balance sheet structure from local storage to survive Termux crashes."""
+    defaults = {
+        "SOL": {"balance": 0.118359694, "avg_buy": 88.07},
+        "ATOM": {"balance": 4.720473, "avg_buy": 1.72},
+        "BTC": {"balance": 0.00000000, "avg_buy": 0.01},
+        "ETH": {"balance": 0.00000009, "avg_buy": 0.01}
+    }
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, "r") as f:
                 data = json.load(f)
+                # Handle nested assets key if present, otherwise handle flat dict
                 if "assets" in data:
-                    return data
-        except Exception:
+                    flat_data = {}
+                    for token, details in data["assets"].items():
+                        flat_data[token] = {
+                            "balance": details.get("balance", 0.0),
+                            "avg_buy": details.get("avg_buy", 0.0)
+                        }
+                    return flat_data
+                return data
+        except:
             pass
-    return DEFAULT_SCHEMA
+    return defaults
 
 def save_local_portfolio_state(state):
+    """Saves active balance changes locally so you never have to adjust code files."""
     try:
+        # Save back maintaining the standard flat format expected by cb_monitor.py
         with open(STATE_FILE, "w") as f:
             json.dump(state, f, indent=4)
-    except Exception:
+    except:
         pass
 
 def scrape_yahoo_transaction_updates(state):
+    """Logs into your Yahoo profile via secure IMAP to scan and pull recent balance modifications."""
     if not YAHOO_PASS or "your_yahoo" in YAHOO_PASS:
         return state
 
-    assets = state.get("assets", {})
     try:
         mail = imaplib.IMAP4_SSL("imap.mail.yahoo.com", 993)
         mail.login(YAHOO_USER, YAHOO_PASS)
@@ -93,28 +82,28 @@ def scrape_yahoo_transaction_updates(state):
                         match = re.search(r"YOUR\s+([A-Z0-9]+)\s+IS\s+NOW\s+AVAILABLE", subject)
                         if match:
                             ticker = match.group(1)
-                            if ticker in assets and assets[ticker]["balance"] == 0:
-                                assets[ticker]["balance"] = 0.79890200 
+                            if ticker in state and state[ticker]["balance"] == 0:
+                                state[ticker]["balance"] = 0.79890200 
 
                     elif "SOLD" in subject:
                         match = re.search(r"SOLD\s+\$?[\d\.]+\s+OF\s+([A-Z0-9]+)", subject)
                         if match:
                             ticker = match.group(1)
-                            if ticker in assets and assets[ticker]["balance"] > 0:
-                                assets[ticker]["balance"] = 0.00000000
+                            if ticker in state:
+                                if state[ticker]["balance"] > 0:
+                                    state[ticker]["balance"] = 0.00000000
 
                     elif "EARNING" in subject or "REWARD" in subject:
                         for token in ["SOL", "ATOM"]:
-                            if token in subject and token in assets:
-                                assets[token]["balance"] += 0.00000150 
+                            if token in subject and token in state:
+                                state[token]["balance"] += 0.00000150 
         mail.logout()
     except Exception:
         pass
-    
-    state["assets"] = assets
     return state
 
 def get_live_price(ticker):
+    """Fetches real-time spot market pricing directly from Coinbase CDP SDK."""
     try:
         product = client.get_product(product_id=f"{ticker}-USD")
         if hasattr(product, "price"):
@@ -126,11 +115,11 @@ def get_live_price(ticker):
     return 0.0
 
 def main_verification_loop():
-    full_state = load_local_portfolio_state()
-    full_state = scrape_yahoo_transaction_updates(full_state)
-    save_local_portfolio_state(full_state)
-
-    assets_map = full_state.get("assets", {})
+    """Aggregates balances combining liquid states, local cache maps, and email scraper records."""
+    portfolio_state = load_local_portfolio_state()
+    
+    portfolio_state = scrape_yahoo_transaction_updates(portfolio_state)
+    save_local_portfolio_state(portfolio_state)
 
     try:
         response = client.get_accounts(limit=250)
@@ -155,52 +144,46 @@ def main_verification_loop():
                 available = float(acc.get("available_balance", {}).get("value", "0"))
                 held = float(acc.get("hold", {}).get("value", "0"))
                 cash_balances[currency_ticker] += (available + held)
-            except Exception:
+            except:
                 pass
 
-    for token in sorted(assets_map.keys()):
+    for token in sorted(portfolio_state.keys()):
         liquid_balance = 0.0
         for acc in accounts:
             if str(acc.get("currency", "")).upper().strip() == token:
                 try:
-                    available = float(acc.get("available_value", {}).get("value", "0") or acc.get("available_balance", {}).get("value", "0"))
+                    available = float(acc.get("available_balance", {}).get("value", "0"))
                     held = float(acc.get("hold", {}).get("value", "0"))
                     liquid_balance += (available + held)
-                except Exception:
+                except:
                     pass
         
-        details = assets_map[token]
-        stored_exchange_bal = details.get("balance", 0.0)
-        exchange_avg_buy = details.get("avg_buy", 0.0)
+        stored_balance = portfolio_state[token]["balance"]
         
-        ext = details.get("external_purchases", {})
-        ext_units = ext.get("total_units", 0.0)
-        ext_usd = ext.get("total_usd_spent", 0.0)
+        # If API returns a liquid balance greater than stored balance, update stored state
+        if liquid_balance > stored_balance:
+            stored_balance = liquid_balance
+            portfolio_state[token]["balance"] = liquid_balance
+            save_local_portfolio_state(portfolio_state)
 
-        reconciled_exchange_bal = max(liquid_balance, stored_exchange_bal)
-        total_balance = reconciled_exchange_bal + ext_units
-        
-        total_usd_spent = (reconciled_exchange_bal * exchange_avg_buy) + ext_usd
-        true_avg_buy = (total_usd_spent / total_balance) if total_balance > 0 else 0.0
+        total_balance = max(liquid_balance, stored_balance)
+        avg_buy = portfolio_state[token]["avg_buy"]
 
         live_spot_price = get_live_price(token)
         current_value = total_balance * live_spot_price
-        initial_cost = total_usd_spent
+        initial_cost = total_balance * avg_buy
         net_profit = current_value - initial_cost
         
         total_portfolio_value += current_value
         total_portfolio_cost += initial_cost
 
         print(f"• {token:<4} Total Amount: {total_balance:.8f}")
-        if ext_units > 0:
-            print(f"       [External Purchases/DCA: +{ext_units:.8f} {token} (${ext_usd:,.2f} spent)]")
-            
-        print(f"       True Weighted Buy: ${true_avg_buy:,.2f} | Live Spot: ${live_spot_price:,.2f}")
-        print(f"       Holding Value:     ${current_value:,.2f}")
+        print(f"       Avg Buy Price: ${avg_buy:,.2f} | Live Spot: ${live_spot_price:,.2f}")
+        print(f"       Holding Value: ${current_value:,.2f}")
         
-        if true_avg_buy > 0:
+        if avg_buy > 0:
             status = "🟢 PROFIT" if net_profit >= 0 else "🔴 LOSS"
-            print(f"       Net Return:        ${net_profit:+,.2f} [{status}]")
+            print(f"       Net Return:    ${net_profit:+,.2f} [{status}]")
         print("-" * 50)
 
     has_cash = False
