@@ -5,6 +5,7 @@ import re
 import imaplib
 import email
 import banking_engine
+import grid_engine
 from email.header import decode_header
 from coinbase.rest import RESTClient
 
@@ -230,6 +231,12 @@ def main_verification_loop():
         banking_engine.process_banking_logic()
     except Exception as e:
         print(f"⚠️ Banking Engine Execution Error: {e}\n")
+    # --- EXECUTE GRID TRADING ENGINE ---
+    try:
+        grid_engine.initialize_grid() # Or an execution function if you expand it to check fills
+    except Exception as e:
+        print(f"⚠️ Grid Engine Execution Error: {e}\n")
+
 
 if __name__ == "__main__":
     while True:
