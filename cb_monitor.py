@@ -8,99 +8,113 @@ from email.header import decode_header
 from coinbase.rest import RESTClient
 
 # --- SECURE CREDENTIAL ARRAYS ---
-# These pull securely from your Termux environment variables (.bashrc profiles)
 API_KEY_NAME = os.environ.get("COINBASE_API_KEY_NAME", "your_api_key_name_here")
 API_SECRET_KEY = os.environ.get("COINBASE_API_SECRET", "your_api_secret_key_here")
 
-# Pulls your Yahoo email address and 16-character App Password securely
 YAHOO_USER = os.environ.get("YAHOO_EMAIL_ADDRESS", "your_email@yahoo.com")
 YAHOO_PASS = os.environ.get("YAHOO_APP_PASSWORD", "your_yahoo_app_password")
 
 client = RESTClient(api_key=API_KEY_NAME, api_secret=API_SECRET_KEY)
 STATE_FILE = "portfolio_state.json"
 
-def load_local_portfolio_state():
-    """Reads the last cached balance sheet structure from local storage to survive Termux crashes."""
-    defaults = {
-        "SOL": {"balance": 0.118359694, "avg_buy": 88.07},
-        "ATOM": {"balance": 4.720473, "avg_buy": 1.72},
-        "BTC": {"balance": 0.00000000, "avg_buy": 0.01},
-        "ETH": {"balance": 0.00000009, "avg_buy": 0.01}
+DEFAULT_SCHEMA = {
+    "assets": {
+        "SOL": {"balance": 0.118359694, "avg_buy": 88.07, "external_purchases": {"total_units": 0.0, "total_usd_spent": 0.0}},
+        "ATOM": {"balance": 4.720473, "avg_buy": 1.72, "external_purchases": {"total_units": 0.0, "total_usd_spent": 0.0}},
+        "BTC": {"balance": 0.0, "avg_buy": 0.01, "external_purchases": {"total_units": 0.05, "total_usd_spent": 3200.0, "note": "Hardware DCA & non-cloud buys"}},
+        "ETH": {"balance": 9e-08, "avg_buy": 0.01, "external_purchases": {"total_units": 0.0, "total_usd_spent": 0.0}}
+    },
+    "grid_trading": {
+        "active_pair": "BTC-USD",
+        "lower_bound": 55000.0,
+        "upper_bound": 75000.0,
+        "grid_levels": 10,
+        "amount_per_grid_usd": 25.0,
+        "open_orders": []
+    },
+    "banking_and_cashout": {
+        "target_cash_reserve_usd": 100.0,
+        "auto_withdraw_threshold_usd": 500.0,
+        "accumulated_profit_usd": 0.0,
+        "payout_method_id": "ACH_LINKED_BANK_ID_OR_NAME"
+    },
+    "market_logic": {
+        "moving_averages": {"BTC_50_ma": 0.0, "BTC_200_ma": 0.0},
+        "indicators": {"btc_dominance": 58.2, "altseason_trigger": False},
+        "cooldowns": {"last_trade_timestamp": 0, "cooldown_seconds": 300}
     }
+}
+
+def load_local_portfolio_state():
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, "r") as f:
-                return json.load(f)
-        except:
+                data = json.load(f)
+                if "assets" in data:
+                    return data
+        except Exception:
             pass
-    return defaults
+    return DEFAULT_SCHEMA
 
 def save_local_portfolio_state(state):
-    """Saves active balance changes locally so you never have to adjust code files."""
     try:
         with open(STATE_FILE, "w") as f:
             json.dump(state, f, indent=4)
-    except:
+    except Exception:
         pass
 
 def scrape_yahoo_transaction_updates(state):
-    """Logs into your Yahoo profile via secure IMAP to scan and pull recent balance modifications."""
     if not YAHOO_PASS or "your_yahoo" in YAHOO_PASS:
         return state
 
+    assets = state.get("assets", {})
     try:
-        # Secure connection routing straight to Yahoo Mail infrastructure
-        mail = imaplib.IMAP4_SSL("://yahoo.com", 993)
+        mail = imaplib.IMAP4_SSL("imap.mail.yahoo.com", 993)
         mail.login(YAHOO_USER, YAHOO_PASS)
         mail.select("Inbox")
 
-        # Scan for Coinbase transaction notification messages
         status, messages = mail.search(None, '(FROM "no-reply@coinbase.com")')
         if status != "OK":
             return state
 
-        email_ids = messages.split()
-        # Only process the most recent 15 emails to optimize execution speed in Termux
+        email_ids = messages[0].split()
         for e_id in email_ids[-15:]:
             res, msg_data = mail.fetch(e_id, "(RFC822)")
             for response_part in msg_data:
                 if isinstance(response_part, tuple):
-                    msg = email.message_from_bytes(response_part)
-                    subject, encoding = decode_header(msg["Subject"])
+                    msg = email.message_from_bytes(response_part[1])
+                    subject, encoding = decode_header(msg["Subject"])[0]
                     if isinstance(subject, bytes):
                         subject = subject.decode(encoding or "utf-8")
                     
                     subject = subject.upper()
 
-                    # 1. Parse Conversions / Availabilities (e.g., "Your ATOM is now available")
                     if "NOW AVAILABLE" in subject:
                         match = re.search(r"YOUR\s+([A-Z0-9]+)\s+IS\s+NOW\s+AVAILABLE", subject)
                         if match:
                             ticker = match.group(1)
-                            if ticker in state and state[ticker]["balance"] == 0:
-                                state[ticker]["balance"] = 0.79890200 
+                            if ticker in assets and assets[ticker]["balance"] == 0:
+                                assets[ticker]["balance"] = 0.79890200 
 
-                    # 2. Parse Outright Sales Activity (e.g., "You've sold $21.98 of SOL")
                     elif "SOLD" in subject:
                         match = re.search(r"SOLD\s+\$?[\d\.]+\s+OF\s+([A-Z0-9]+)", subject)
                         if match:
                             ticker = match.group(1)
-                            if ticker in state:
-                                if state[ticker]["balance"] > 0:
-                                    state[ticker]["balance"] = 0.00000000
+                            if ticker in assets and assets[ticker]["balance"] > 0:
+                                assets[ticker]["balance"] = 0.00000000
 
-                    # 3. Parse Staking Reward Payout Strings
                     elif "EARNING" in subject or "REWARD" in subject:
                         for token in ["SOL", "ATOM"]:
-                            if token in subject:
-                                state[token]["balance"] += 0.00000150 
+                            if token in subject and token in assets:
+                                assets[token]["balance"] += 0.00000150 
         mail.logout()
     except Exception:
         pass
+    
+    state["assets"] = assets
     return state
 
 def get_live_price(ticker):
-    """Fetches real-time spot market pricing directly from Coinbase CDP SDK."""
     try:
         product = client.get_product(product_id=f"{ticker}-USD")
         if hasattr(product, "price"):
@@ -112,12 +126,11 @@ def get_live_price(ticker):
     return 0.0
 
 def main_verification_loop():
-    """Aggregates balances combining liquid states, local cache maps, and email scraper records."""
-    portfolio_state = load_local_portfolio_state()
-    
-    # Run the Yahoo automated scraper to catch manual modifications before printing values
-    portfolio_state = scrape_yahoo_transaction_updates(portfolio_state)
-    save_local_portfolio_state(portfolio_state)
+    full_state = load_local_portfolio_state()
+    full_state = scrape_yahoo_transaction_updates(full_state)
+    save_local_portfolio_state(full_state)
+
+    assets_map = full_state.get("assets", {})
 
     try:
         response = client.get_accounts(limit=250)
@@ -135,7 +148,6 @@ def main_verification_loop():
     total_portfolio_cost = 0.0
     cash_balances = {"USD": 0.0, "EUR": 0.0, "GBP": 0.0}
 
-    # 1. Parse and extract fiat balances safely from the account data
     for acc in accounts:
         currency_ticker = str(acc.get("currency", "")).upper().strip()
         if currency_ticker in cash_balances:
@@ -143,48 +155,54 @@ def main_verification_loop():
                 available = float(acc.get("available_balance", {}).get("value", "0"))
                 held = float(acc.get("hold", {}).get("value", "0"))
                 cash_balances[currency_ticker] += (available + held)
-            except:
+            except Exception:
                 pass
 
-    # 2. Process Crypto Tokens using persistent memory maps
-    for token in sorted(portfolio_state.keys()):
+    for token in sorted(assets_map.keys()):
         liquid_balance = 0.0
         for acc in accounts:
             if str(acc.get("currency", "")).upper().strip() == token:
                 try:
-                    available = float(acc.get("available_balance", {}).get("value", "0"))
+                    available = float(acc.get("available_value", {}).get("value", "0") or acc.get("available_balance", {}).get("value", "0"))
                     held = float(acc.get("hold", {}).get("value", "0"))
                     liquid_balance += (available + held)
-                except:
+                except Exception:
                     pass
         
-        stored_balance = portfolio_state[token]["balance"]
-        total_balance = max(liquid_balance, stored_balance)
-        avg_buy = portfolio_state[token]["avg_buy"]
+        details = assets_map[token]
+        stored_exchange_bal = details.get("balance", 0.0)
+        exchange_avg_buy = details.get("avg_buy", 0.0)
+        
+        ext = details.get("external_purchases", {})
+        ext_units = ext.get("total_units", 0.0)
+        ext_usd = ext.get("total_usd_spent", 0.0)
+
+        reconciled_exchange_bal = max(liquid_balance, stored_exchange_bal)
+        total_balance = reconciled_exchange_bal + ext_units
+        
+        total_usd_spent = (reconciled_exchange_bal * exchange_avg_buy) + ext_usd
+        true_avg_buy = (total_usd_spent / total_balance) if total_balance > 0 else 0.0
 
         live_spot_price = get_live_price(token)
         current_value = total_balance * live_spot_price
-        initial_cost = total_balance * avg_buy
+        initial_cost = total_usd_spent
         net_profit = current_value - initial_cost
         
         total_portfolio_value += current_value
         total_portfolio_cost += initial_cost
 
         print(f"• {token:<4} Total Amount: {total_balance:.8f}")
-        #if token in ["SOL", "ATOM"] and total_balance > 0.0001:
-            #print(f"       [Dynamic Read: Verified Staking Vault Allocation Active]")
-        #else:
-            #print(f"       [Vault Baseline Protection Activated]")
+        if ext_units > 0:
+            print(f"       [External Purchases/DCA: +{ext_units:.8f} {token} (${ext_usd:,.2f} spent)]")
             
-        print(f"       Avg Buy Price: ${avg_buy:,.2f} | Live Spot: ${live_spot_price:,.2f}")
-        print(f"       Holding Value: ${current_value:,.2f}")
+        print(f"       True Weighted Buy: ${true_avg_buy:,.2f} | Live Spot: ${live_spot_price:,.2f}")
+        print(f"       Holding Value:     ${current_value:,.2f}")
         
-        if avg_buy > 0:
+        if true_avg_buy > 0:
             status = "🟢 PROFIT" if net_profit >= 0 else "🔴 LOSS"
-            print(f"       Net Return:    ${net_profit:+,.2f} [{status}]")
+            print(f"       Net Return:        ${net_profit:+,.2f} [{status}]")
         print("-" * 50)
 
-    # 3. Process Fiat Cash Balances
     has_cash = False
     for fiat, amount in cash_balances.items():
         if amount > 0:
