@@ -31,7 +31,7 @@ def load_local_portfolio_state():
             with open(STATE_FILE, "r") as f:
                 data = json.load(f)
                 
-                # Handle nested assets key if present, otherwise handle flat dict
+                # Handle nested assets key if present
                 if "assets" in data:
                     flat_data = {}
                     for token, details in data["assets"].items():
@@ -41,7 +41,7 @@ def load_local_portfolio_state():
                         }
                     return flat_data
                 
-                # Filter out non-asset metadata dictionaries like banking config
+                # Filter out non-asset configurations (like banking_and_cashout)
                 crypto_assets = {}
                 for key, val in data.items():
                     if isinstance(val, dict) and "balance" in val:
@@ -52,9 +52,8 @@ def load_local_portfolio_state():
     return defaults
 
 def save_local_portfolio_state(state):
-    """Saves active balance changes locally so you never have to adjust code files."""
+    """Saves active balance changes locally while preserving non-asset metadata."""
     try:
-        # Load existing file first to preserve non-asset structures like banking_and_cashout
         existing_data = {}
         if os.path.exists(STATE_FILE):
             try:
@@ -63,7 +62,7 @@ def save_local_portfolio_state(state):
             except:
                 pass
 
-        # Update crypto token data while preserving banking settings
+        # Update crypto token data while leaving banking configurations intact
         existing_data.update(state)
 
         with open(STATE_FILE, "w") as f:
@@ -226,7 +225,7 @@ def main_verification_loop():
         print(f"TOTAL NET PERFORMANCE: ${total_return:+,.2f} [{summary_status}]")
     print("==========================================================\n")
 
-    # --- EXECUTE BANKING MODULE ---
+    # --- AUTOMATED BANKING & CASHOUT MODULE ---
     try:
         banking_engine.process_banking_logic()
     except Exception as e:
