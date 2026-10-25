@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  crypto-monitor:
+    build: .
+    container_name: cb_monitor
+    restart: unless-stopped
+    environment:
+      - COINBASE_API_KEY_NAME=${COINBASE_API_KEY_NAME}
+      - COINBASE_API_SECRET=${COINBASE_API_SECRET}
+      - YAHOO_EMAIL_ADDRESS=${YAHOO_EMAIL_ADDRESS}
+      - YAHOO_APP_PASSWORD=${YAHOO_APP_PASSWORD}
+    volumes:
+      - /mnt/tank/appdata/crypto-monitor:/app
