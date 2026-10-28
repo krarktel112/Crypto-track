@@ -11,4 +11,4 @@ services:
       - YAHOO_EMAIL_ADDRESS=${YAHOO_EMAIL_ADDRESS}
       - YAHOO_APP_PASSWORD=${YAHOO_APP_PASSWORD}
     volumes:
-      - /mnt/tank/appdata/crypto-monitor:/app
+      - /mnt/tank/appdata/crypto-monitor/crypto-monitor:/app
