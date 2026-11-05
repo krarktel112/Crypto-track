@@ -21,8 +21,11 @@ YAHOO_PASS = os.environ.get("YAHOO_APP_PASSWORD", "your_yahoo_app_password")
 client = RESTClient(api_key=API_KEY_NAME, api_secret=API_SECRET_KEY)
 STATE_FILE = "portfolio_state.json"
 
+# Tokens listed here will NEVER be overwritten by live API balances (managed manually via JSON)
+MANUALLY_MANAGED_TOKENS = {"SOL", "ATOM"}
+
 def load_local_portfolio_state():
-    """Reads the last cached balance sheet structure from local storage to survive Termux crashes."""
+    """Reads the last cached balance sheet structure from local storage."""
     defaults = {
         "SOL": {"balance": 0.118511109, "avg_buy": 0.01},
         "ATOM": {"balance": 4.742292, "avg_buy": 0.01},
@@ -34,7 +37,6 @@ def load_local_portfolio_state():
             with open(STATE_FILE, "r") as f:
                 data = json.load(f)
                 
-                # Handle nested assets key if present
                 if "assets" in data:
                     flat_data = {}
                     for token, details in data["assets"].items():
@@ -44,7 +46,6 @@ def load_local_portfolio_state():
                         }
                     return flat_data
                 
-                # Filter out non-asset configurations (banking, grid, market logic)
                 crypto_assets = {}
                 for key, val in data.items():
                     if isinstance(val, dict) and "balance" in val:
@@ -98,25 +99,13 @@ def scrape_yahoo_transaction_updates(state):
                     
                     subject = subject.upper()
 
-                    if "NOW AVAILABLE" in subject:
-                        match = re.search(r"YOUR\s+([A-Z0-9]+)\s+IS\s+NOW\s+AVAILABLE", subject)
-                        if match:
-                            ticker = match.group(1)
-                            if ticker in state and state[ticker]["balance"] == 0:
-                                state[ticker]["balance"] = 0.79890200 
-
-                    elif "SOLD" in subject:
-                        # Improved pattern matching to catch varied subject formats like "YOU SOLD $XX OF BTC"
+                    if "SOLD" in subject:
                         match = re.search(r"(?:YOU\s+)?SOLD\s+(?:\$?[\d\.]+\s+OF\s+|[\d\.]+\s+)?([A-Z0-9]+)", subject)
                         if match:
                             ticker = match.group(1)
-                            if ticker in state:
+                            # Only auto-zero out non-staked tokens via email if desired, or let API handle BTC
+                            if ticker in state and ticker not in MANUALLY_MANAGED_TOKENS:
                                 state[ticker]["balance"] = 0.00000000
-
-                    elif "EARNING" in subject or "REWARD" in subject:
-                        for token in ["SOL", "ATOM"]:
-                            if token in subject and token in state:
-                                state[token]["balance"] += 0.00000150 
         mail.logout()
     except Exception:
         pass
@@ -135,7 +124,7 @@ def get_live_price(ticker):
     return 0.0
 
 def main_verification_loop():
-    """Aggregates balances combining liquid states, local cache maps, and email scraper records."""
+    """Aggregates balances honoring JSON configurations for staked assets while live-tracking BTC."""
     portfolio_state = load_local_portfolio_state()
     
     portfolio_state = scrape_yahoo_transaction_updates(portfolio_state)
@@ -180,14 +169,23 @@ def main_verification_loop():
         
         stored_balance = portfolio_state[token]["balance"]
         
-        # --- FIX: DYNAMIC RECONCILIATION FOR BOTH BUYS AND SELLS ---
-        # If API liquid balance differs from cached state, prioritize live API state and persist it
-        if liquid_balance != stored_balance:
-            stored_balance = liquid_balance
-            portfolio_state[token]["balance"] = liquid_balance
-            save_local_portfolio_state(portfolio_state)
+        # --- HYBRID LOGIC ---
+        if token in MANUALLY_MANAGED_TOKENS:
+            # Force the script to ignore API for staked tokens and use JSON state directly
+            total_balance = stored_balance
+        else:
+            # Live track via API for un-staked tokens (like BTC, ETH)
+            if liquid_balance == 0.0 and stored_balance > 0.0:
+                portfolio_state[token]["balance"] = 0.0
+                total_balance = 0.0
+                save_local_portfolio_state(portfolio_state)
+            elif liquid_balance > 0.0 and liquid_balance != stored_balance:
+                portfolio_state[token]["balance"] = liquid_balance
+                total_balance = liquid_balance
+                save_local_portfolio_state(portfolio_state)
+            else:
+                total_balance = stored_balance
 
-        total_balance = liquid_balance
         avg_buy = portfolio_state[token]["avg_buy"]
 
         live_spot_price = get_live_price(token)
