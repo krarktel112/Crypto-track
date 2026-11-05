@@ -106,12 +106,12 @@ def scrape_yahoo_transaction_updates(state):
                                 state[ticker]["balance"] = 0.79890200 
 
                     elif "SOLD" in subject:
-                        match = re.search(r"SOLD\s+\$?[\d\.]+\s+OF\s+([A-Z0-9]+)", subject)
+                        # Improved pattern matching to catch varied subject formats like "YOU SOLD $XX OF BTC"
+                        match = re.search(r"(?:YOU\s+)?SOLD\s+(?:\$?[\d\.]+\s+OF\s+|[\d\.]+\s+)?([A-Z0-9]+)", subject)
                         if match:
                             ticker = match.group(1)
                             if ticker in state:
-                                if state[ticker]["balance"] > 0:
-                                    state[ticker]["balance"] = 0.00000000
+                                state[ticker]["balance"] = 0.00000000
 
                     elif "EARNING" in subject or "REWARD" in subject:
                         for token in ["SOL", "ATOM"]:
@@ -180,12 +180,14 @@ def main_verification_loop():
         
         stored_balance = portfolio_state[token]["balance"]
         
-        if liquid_balance > stored_balance:
+        # --- FIX: DYNAMIC RECONCILIATION FOR BOTH BUYS AND SELLS ---
+        # If API liquid balance differs from cached state, prioritize live API state and persist it
+        if liquid_balance != stored_balance:
             stored_balance = liquid_balance
             portfolio_state[token]["balance"] = liquid_balance
             save_local_portfolio_state(portfolio_state)
 
-        total_balance = max(liquid_balance, stored_balance)
+        total_balance = liquid_balance
         avg_buy = portfolio_state[token]["avg_buy"]
 
         live_spot_price = get_live_price(token)
