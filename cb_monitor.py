@@ -103,7 +103,6 @@ def scrape_yahoo_transaction_updates(state):
                         match = re.search(r"(?:YOU\s+)?SOLD\s+(?:\$?[\d\.]+\s+OF\s+|[\d\.]+\s+)?([A-Z0-9]+)", subject)
                         if match:
                             ticker = match.group(1)
-                            # Only auto-zero out non-staked tokens via email if desired, or let API handle BTC
                             if ticker in state and ticker not in MANUALLY_MANAGED_TOKENS:
                                 state[ticker]["balance"] = 0.00000000
         mail.logout()
@@ -171,10 +170,8 @@ def main_verification_loop():
         
         # --- HYBRID LOGIC ---
         if token in MANUALLY_MANAGED_TOKENS:
-            # Force the script to ignore API for staked tokens and use JSON state directly
             total_balance = stored_balance
         else:
-            # Live track via API for un-staked tokens (like BTC, ETH)
             if liquid_balance == 0.0 and stored_balance > 0.0:
                 portfolio_state[token]["balance"] = 0.0
                 total_balance = 0.0
@@ -198,6 +195,12 @@ def main_verification_loop():
 
         print(f"• {token:<4} Total Amount: {total_balance:.8f}")
         print(f"       Avg Buy Price: ${avg_buy:,.2f} | Live Spot: ${live_spot_price:,.2f}")
+        
+        # --- SATOSHI CALCULATION ---
+        if token == "BTC" and live_spot_price > 0:
+            sats_per_dollar = 100_000_000 / live_spot_price
+            print(f"       Sats per USD:  {sats_per_dollar:,.0f} sats/$1")
+
         print(f"       Holding Value: ${current_value:,.2f}")
         
         if avg_buy > 0:
