@@ -193,7 +193,8 @@ def main_verification_loop():
         total_portfolio_value += current_value
         total_portfolio_cost += initial_cost
 
-        print(f"• {token}: {total_balance:.6f}")
+        # Restored full 8-decimal precision here:
+        print(f"• {token}: {total_balance:.8f}")
         print(f"  Avg: ${avg_buy:,.2f} | Spot: ${live_spot_price:,.2f}")
         
         # --- SATOSHI CALCULATION ---
