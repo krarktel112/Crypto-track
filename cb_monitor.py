@@ -27,8 +27,8 @@ MANUALLY_MANAGED_TOKENS = {"SOL", "ATOM"}
 def load_local_portfolio_state():
     """Reads the last cached balance sheet structure from local storage."""
     defaults = {
-        "SOL": {"balance": 0.118511109, "avg_buy": 0.01},
-        "ATOM": {"balance": 4.742292, "avg_buy": 0.01},
+        "SOL": {"balance": 0.118566518, "avg_buy": 88.08},
+        "ATOM": {"balance": 4.753202, "avg_buy": 1.72},
         "BTC": {"balance": 0.00000000, "avg_buy": 0.01},
         "ETH": {"balance": 0.00000009, "avg_buy": 0.01}
     }
@@ -137,9 +137,9 @@ def main_verification_loop():
         print(f"❌ API Failure: {e}")
         return
 
-    print("\n==========================================================")
-    print("             VERIFIED REAL-TIME TOTAL BALANCES            ")
-    print("==========================================================")
+    print("\n========================================")
+    print("    VERIFIED REAL-TIME TOTAL BALANCES   ")
+    print("========================================")
 
     total_portfolio_value = 0.0
     total_portfolio_cost = 0.0
@@ -193,41 +193,41 @@ def main_verification_loop():
         total_portfolio_value += current_value
         total_portfolio_cost += initial_cost
 
-        print(f"• {token:<4} Total Amount: {total_balance:.8f}")
-        print(f"       Avg Buy Price: ${avg_buy:,.2f} | Live Spot: ${live_spot_price:,.2f}")
+        print(f"• {token}: {total_balance:.6f}")
+        print(f"  Avg: ${avg_buy:,.2f} | Spot: ${live_spot_price:,.2f}")
         
         # --- SATOSHI CALCULATION ---
         if token == "BTC" and live_spot_price > 0:
             sats_per_dollar = 100_000_000 / live_spot_price
-            print(f"       Sats per USD:  {sats_per_dollar:,.0f} sats/$1")
+            print(f"  Sats/USD: {sats_per_dollar:,.0f}")
 
-        print(f"       Holding Value: ${current_value:,.2f}")
+        print(f"  Val: ${current_value:,.2f}")
         
         if avg_buy > 0:
             status = "🟢 PROFIT" if net_profit >= 0 else "🔴 LOSS"
-            print(f"       Net Return:    ${net_profit:+,.2f} [{status}]")
-        print("-" * 50)
+            print(f"  Return: ${net_profit:+,.2f} [{status}]")
+        print("-" * 40)
 
     has_cash = False
     for fiat, amount in cash_balances.items():
         if amount > 0:
             if not has_cash:
-                print("                     FIAT CASH BALANCES                   ")
-                print("-" * 50)
+                print("          FIAT CASH BALANCES            ")
+                print("-" * 40)
                 has_cash = True
             usd_value = amount if fiat == "USD" else (amount * get_live_price(fiat))
             total_portfolio_value += usd_value 
             symbol = "£" if fiat == "GBP" else ("€" if fiat == "EUR" else "$")
-            print(f"• {fiat:<4} Total Cash:   {symbol}{amount:,.2f} (Value: ${usd_value:,.2f})")
-            print("-" * 50)
+            print(f"• {fiat}: {symbol}{amount:,.2f} (${usd_value:,.2f})")
+            print("-" * 40)
 
-    print("==========================================================")
-    print(f"TOTAL PORTFOLIO VALUE: ${total_portfolio_value:,.2f}")
+    print("========================================")
+    print(f"TOTAL VALUE:     ${total_portfolio_value:,.2f}")
     if total_portfolio_cost > 0:
         total_return = total_portfolio_value - total_portfolio_cost
         summary_status = "🟢 NET GAIN" if total_return >= 0 else "🔴 NET LOSS"
-        print(f"TOTAL NET PERFORMANCE: ${total_return:+,.2f} [{summary_status}]")
-    print("==========================================================\n")
+        print(f"TOTAL RETURN:    ${total_return:+,.2f} [{summary_status}]")
+    print("========================================\n")
 
     # --- EXECUTE SUB-MODULES ---
     try:
