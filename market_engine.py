@@ -1,49 +1,39 @@
-import json
-import time
+import os
+from coinbase.rest import RESTClient
 
-def evaluate_market_logic(verbose=False):
-    state_file = "portfolio_state.json"
-    
-    with open(state_file, "r") as f:
-        state = json.load(f)
-        
-    ml = state.get("market_logic", {})
-    ma = ml.get("moving_averages", {})
-    indicators = ml.get("indicators", {})
-    cooldowns = ml.get("cooldowns", {})
-    
-    if verbose:
-        print("📈 --- Heuristic Market Analysis & Rotation ---")
-        print(f"  • BTC 50 MA: ${ma.get('BTC_50_ma', 0.0):,.2f}")
-        print(f"  • BTC 200 MA: ${ma.get('BTC_200_ma', 0.0):,.2f}")
-        print(f"  • BTC Dominance: {indicators.get('btc_dominance', 0.0)}%")
-    
-    # Check cool-down status silently
-    last_trade = cooldowns.get("last_trade_timestamp", 0)
-    cooldown_secs = cooldowns.get("cooldown_seconds", 300)
-    current_time = int(time.time())
-    elapsed = current_time - last_trade
-    
-    # Example simulated updates
-    ma["BTC_50_ma"] = 64250.0
-    ma["BTC_200_ma"] = 58100.0
-    indicators["btc_dominance"] = 57.5
-    
-    bull_trend = ma["BTC_50_ma"] > ma["BTC_200_ma"]
-    
-    if indicators["btc_dominance"] < 55.0:
-        indicators["altseason_trigger"] = True
-        print("\n⚡ [Market Alert]: BTC Dominance dropped below 55% -> Altseason rotation triggered!")
-    else:
-        indicators["altseason_trigger"] = False
-        
-    # Sync back into state
-    ml["moving_averages"] = ma
-    ml["indicators"] = indicators
-    state["market_logic"] = ml
-    
-    with open(state_file, "w") as f:
-        json.dump(state, f, indent=4)
+API_KEY_NAME = os.environ.get("COINBASE_API_KEY_NAME")
+API_SECRET_KEY = os.environ.get("COINBASE_API_SECRET")
+client = RESTClient(api_key=API_KEY_NAME, api_secret=API_SECRET_KEY)
 
-if __name__ == "__main__":
-    evaluate_market_logic(verbose=True)
+def evaluate_market_logic():
+    """
+    Evaluates live market conditions and executes trades automatically 
+    when thresholds are met on the TrueNAS backend.
+    """
+    print("⚙️ Market Engine: Evaluating live conditions...")
+
+    try:
+        # Example: Fetch live BTC price
+        product = client.get_product(product_id="BTC-USD")
+        spot_price = float(product.price) if hasattr(product, "price") else float(product.get("price", 0))
+
+        # --- DEFINE YOUR THRESHOLD CONDITIONS HERE ---
+        # Example condition: If BTC drops below a target dip price, execute a buy order
+        TARGET_BUY_THRESHOLD = 60000.00  # Change to your target dip price
+        
+        if spot_price > 0 and spot_price <= TARGET_BUY_THRESHOLD:
+            print(f"🚨 TARGET HIT! BTC is at ${spot_price:,.2f} (<= ${TARGET_BUY_THRESHOLD:,.2f})")
+            
+            # --- LIVE ORDER EXECUTION ---
+            # Uncomment below to enable live order placement via Coinbase API:
+            # order = client.create_order(
+            #     product_id="BTC-USD",
+            #     side="BUY",
+            #     order_configuration={"market_market_ioc": {"quote_size": "10.00"}} # Buy $10 of BTC
+            # )
+            # print(f"✅ Trade Executed Successfully: {order}")
+        else:
+            print(f"📊 Market stable. BTC Spot: ${spot_price:,.2f} (Target: ${TARGET_BUY_THRESHOLD:,.2f})")
+
+    except Exception as e:
+        print(f"⚠️ Market Engine Execution Error: {e}")
