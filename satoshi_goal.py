@@ -1,3 +1,6 @@
+import os
+import time
+import json
 import calendar
 from datetime import datetime
 import requests
@@ -84,5 +87,8 @@ def calculate_satoshi_goals():
 
 
 if __name__ == "__main__":
-    calculate_satoshi_goals()
+    while True:
+        try:
+            calculate_satoshi_goals()
+            os.system
   
