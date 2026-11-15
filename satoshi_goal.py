@@ -90,5 +90,9 @@ if __name__ == "__main__":
     while True:
         try:
             calculate_satoshi_goals()
-            os.system
-  
+            time.sleep(30)
+            os.system('clear')
+        except:
+            print("restarting")
+            time.sleep(30)
+            os.system('clear')
