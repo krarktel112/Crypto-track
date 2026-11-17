@@ -7,7 +7,8 @@ import requests
 
 # Monthly Expenses (USD)
 EXPENSES = {
-    "Rent": 899.76,
+    "Rent": 863,
+    "Utilities": 36.76,
     "Loan (Toget": 134.02,
     "Electric": 133.00,
     "Food": 121.08,
