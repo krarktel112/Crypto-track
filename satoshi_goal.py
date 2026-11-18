@@ -20,6 +20,7 @@ EXPENSES = {
     "Insurance": 6.50,
     "Celexa": 2.84,
     "Package": 2.13,
+    "Singles": 1.06,
 }
 
 SATS_PER_BTC = 100_000_000
