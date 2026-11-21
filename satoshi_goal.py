@@ -19,6 +19,8 @@ EXPENSES = {
     "Crunchyroll": 9.99,
     "Insurance": 6.50,
     "Celexa": 2.84,
+    "Package": 2.13,
+    "Singles": 1.06,
     "Package": 0.31,
     "Singles": 0.265,
 }
