@@ -25,8 +25,8 @@ EXPENSES = {
     "Single": 0.265,
 }
 
-# Next Package Tracker Config (update balances/rates as you sweep & buy)
-NEXT_PACKAGE_USD = 1.99
+# Next Package Tracker Config ($1.99 promo + 7% tax = $2.13)
+NEXT_PACKAGE_USD = 2.13
 SPREAD_BUFFER = 0.08  # 8% buffer for swap/card spread or rounding
 FLEET_DAILY_SATS = 527.66  # Confirmed post-CloudMineX $1.99 Promo #1 rate
 APP_CAP_SATS = 2500
@@ -38,7 +38,7 @@ PENDING_APPS = {
 }
 
 SATS_PER_BTC = 100_000_000
-FALLBACK_BTC_PRICE = 64963.39  # Live spot reference ($64,963.39)
+FALLBACK_BTC_PRICE = 60240.68  # Live spot reference ($60,240.68)
 
 
 def get_live_btc_price() -> tuple[float, str]:
@@ -72,7 +72,7 @@ def print_next_package_tracker(
     spread_buffer: float = SPREAD_BUFFER,
     cap_sats: int = APP_CAP_SATS,
 ) -> None:
-  """Prints a 40-char progress tracker toward the next package purchase."""
+  """Prints a 40-char progress tracker toward the next tax-inclusive package."""
   pending_apps = pending_apps if pending_apps is not None else PENDING_APPS
 
   net_pending = 0
@@ -109,7 +109,7 @@ def print_next_package_tracker(
   bar = "#" * filled + "-" * (bar_len - filled)
 
   print("=" * 40)
-  print(f"   NEXT PACKAGE TRACKER (${package_usd:.2f})")
+  print(f"  NEXT PACKAGE (${package_usd:.2f} W/ TAX)")
   print("=" * 40)
   print(f"Fleet Rate: {daily_rate_sats:.2f} sats/day")
   print(
@@ -133,7 +133,9 @@ def print_next_package_tracker(
   print("=" * 40)
 
 
-def calculate_satoshi_goals(btc_price: float | None = None, price_source: str | None = None):
+def calculate_satoshi_goals(
+    btc_price: float | None = None, price_source: str | None = None
+):
   now = datetime.now()
   days_in_month = calendar.monthrange(now.year, now.month)[1]
   current_day = now.day
