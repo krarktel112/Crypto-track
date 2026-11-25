@@ -310,6 +310,11 @@ if __name__ == "__main__":
   while True:
     try:
       btc_price, price_source = get_live_btc_price()
+      cb_sats, cb_status = get_coinbase_btc_sats()
+      calculate_satoshi_goals(btc_price, price_source)
+      print_next_package_tracker(btc_price, cb_sats, cb_status)
+      time.sleep(30)
+      os.system("clear")
     except Exception:
       print("restarting")
       time.sleep(30)
