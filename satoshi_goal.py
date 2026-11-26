@@ -25,8 +25,6 @@ EXPENSES = {
     "Crunchyroll": 9.99,
     "Insurance": 6.50,
     "Celexa": 2.84,
-    "Package": 0.31,
-    "Single": 0.265,
 }
 
 # Next Package Tracker Config ($1.99 promo + 7% tax = $2.13)
