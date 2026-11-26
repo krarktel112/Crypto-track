@@ -31,17 +31,21 @@ EXPENSES = {
 
 # Next Package Tracker Config ($1.99 promo + 7% tax = $2.13)
 NEXT_PACKAGE_USD = 2.13
-SPREAD_BUFFER = 0.08  # 8% buffer for swap/card spread or rounding
-FLEET_DAILY_SATS = 527.66  # Confirmed post-CloudMineX $1.99 Promo #1 rate
+SPREAD_BUFFER = 0.08
+FLEET_DAILY_SATS = 527.66
 APP_CAP_SATS = 2500
 
-# Coinbase CDP Auth & Local Cache Config
+# Match cb_monitor credentials & shared state file
+API_KEY_NAME = os.environ.get(
+    "COINBASE_API_KEY_NAME", "your_api_key_name_here"
+)
+API_SECRET_KEY = os.environ.get(
+    "COINBASE_API_SECRET", "your_api_secret_key_here"
+)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CDP_KEY_FILE = os.path.join(BASE_DIR, "cdp_api_key.json")
-CB_CACHE_FILE = os.path.join(BASE_DIR, "coinbase_sats_cache.json")
-CB_REFRESH_SECONDS = 60  # Query authenticated Coinbase API at most once/min
+STATE_FILE = os.path.join(BASE_DIR, "portfolio_state.json")
+CB_REFRESH_SECONDS = 60
 
-# Manual non-Coinbase balances (update as you sweep)
 SPEED_WALLET_SATS = 0
 PENDING_APPS = {
     "btc_cloud_mining": {"balance": 0, "fee": 5},
@@ -50,42 +54,50 @@ PENDING_APPS = {
 SATS_PER_BTC = 100_000_000
 FALLBACK_BTC_PRICE = 60240.68
 
+client = None
+if (
+    RESTClient is not None
+    and API_KEY_NAME
+    and "your_api_key" not in API_KEY_NAME
+):
+  try:
+    client = RESTClient(api_key=API_KEY_NAME, api_secret=API_SECRET_KEY)
+  except Exception:
+    client = None
+
 _last_cb_fetch_ts = 0.0
 _cached_cb_sats = 0
 _cached_cb_status = "Init"
 
 
-def _load_cached_coinbase_sats() -> tuple[int, str]:
-  """Loads the last saved Coinbase BTC sats balance from disk."""
-  if os.path.exists(CB_CACHE_FILE):
-    try:
-      with open(CB_CACHE_FILE, "r", encoding="utf-8") as f:
-        data = json.load(f)
-      return int(data.get("coinbase_sats", 0)), "CB Cache"
-    except Exception:
-      pass
-  return 0, "CB Unlinked"
-
-
-def _save_cached_coinbase_sats(sats: int, btc_amount: float) -> None:
-  """Persists the latest Coinbase BTC sats balance to disk."""
-  try:
-    with open(CB_CACHE_FILE, "w", encoding="utf-8") as f:
-      json.dump(
-          {
-              "coinbase_sats": sats,
-              "coinbase_btc": btc_amount,
-              "updated_at": datetime.now().isoformat(),
-          },
-          f,
-          indent=2,
-      )
-  except Exception:
-    pass
+def load_btc_from_portfolio_state() -> int:
+  """Reads BTC balance from cb_monitor's portfolio_state.json as fallback."""
+  for path in (STATE_FILE, "portfolio_state.json"):
+    if os.path.exists(path):
+      try:
+        with open(path, "r", encoding="utf-8") as f:
+          data = json.load(f)
+        if (
+            "assets" in data
+            and isinstance(data["assets"], dict)
+            and "BTC" in data["assets"]
+        ):
+          btc_val = float(data["assets"]["BTC"].get("balance", 0.0))
+          return round(btc_val * SATS_PER_BTC)
+        if (
+            "BTC" in data
+            and isinstance(data["BTC"], dict)
+            and "balance" in data["BTC"]
+        ):
+          btc_val = float(data["BTC"].get("balance", 0.0))
+          return round(btc_val * SATS_PER_BTC)
+      except Exception:
+        pass
+  return 0
 
 
 def get_coinbase_btc_sats(force: bool = False) -> tuple[int, str]:
-  """Fetches current available BTC balance in Satoshis via Coinbase CDP SDK."""
+  """Fetches available + held BTC in sats using cb_monitor's exact SDK pattern."""
   global _last_cb_fetch_ts, _cached_cb_sats, _cached_cb_status
 
   now_ts = time.time()
@@ -96,75 +108,62 @@ def get_coinbase_btc_sats(force: bool = False) -> tuple[int, str]:
   ):
     return _cached_cb_sats, _cached_cb_status
 
-  if RESTClient is None:
-    sats, status = _load_cached_coinbase_sats()
-    return sats, "No CDP SDK"
+  fallback_sats = load_btc_from_portfolio_state()
+
+  if client is None:
+    _last_cb_fetch_ts = now_ts
+    _cached_cb_sats = fallback_sats
+    _cached_cb_status = "State JSON" if fallback_sats > 0 else "No Key/SDK"
+    return _cached_cb_sats, _cached_cb_status
 
   try:
-    if os.path.exists(CDP_KEY_FILE):
-      client = RESTClient(key_file=CDP_KEY_FILE)
-    else:
-      # Falls back to COINBASE_API_KEY and COINBASE_API_SECRET env vars
-      client = RESTClient()
+    response = client.get_accounts(limit=250)
+    data = (
+        response.to_dict()
+        if hasattr(response, "to_dict")
+        else (response if isinstance(response, dict) else {})
+    )
+    accounts = data.get("accounts", [])
 
-    total_btc = 0.0
-    cursor = None
-    while True:
-      resp = client.get_accounts(limit=250, cursor=cursor)
-      accounts = (
-          resp.get("accounts", [])
-          if isinstance(resp, dict)
-          else getattr(resp, "accounts", [])
-      )
-      for acct in accounts:
-        currency = (
-            acct.get("currency")
-            if isinstance(acct, dict)
-            else getattr(acct, "currency", "")
-        )
-        if currency == "BTC":
-          avail = (
-              acct.get("available_balance", {})
-              if isinstance(acct, dict)
-              else getattr(acct, "available_balance", {})
-          )
-          val = (
-              avail.get("value", "0")
-              if isinstance(avail, dict)
-              else getattr(avail, "value", "0")
-          )
-          total_btc += float(val or 0.0)
+    liquid_btc = 0.0
+    for acc in accounts:
+      if str(acc.get("currency", "")).upper().strip() == "BTC":
+        try:
+          available = float(acc.get("available_balance", {}).get("value", "0"))
+          held = float(acc.get("hold", {}).get("value", "0"))
+          liquid_btc += available + held
+        except Exception:
+          pass
 
-      has_next = (
-          resp.get("has_next", False)
-          if isinstance(resp, dict)
-          else getattr(resp, "has_next", False)
-      )
-      cursor = (
-          resp.get("cursor")
-          if isinstance(resp, dict)
-          else getattr(resp, "cursor", None)
-      )
-      if not has_next or not cursor:
-        break
-
-    cb_sats = round(total_btc * SATS_PER_BTC)
-    _save_cached_coinbase_sats(cb_sats, total_btc)
+    cb_sats = round(liquid_btc * SATS_PER_BTC)
     _last_cb_fetch_ts = now_ts
     _cached_cb_sats = cb_sats
     _cached_cb_status = "CB Live"
     return cb_sats, "CB Live"
 
-  except Exception:
-    sats, status = _load_cached_coinbase_sats()
+  except Exception as exc:
     _last_cb_fetch_ts = now_ts
-    _cached_cb_sats = sats
-    _cached_cb_status = status
-    return sats, status
+    _cached_cb_sats = fallback_sats
+    _cached_cb_status = (
+        f"JSON({type(exc).__name__[:8]})"
+        if fallback_sats > 0
+        else f"Err:{type(exc).__name__[:10]}"
+    )
+    return _cached_cb_sats, _cached_cb_status
 
 
 def get_live_btc_price() -> tuple[float, str]:
-  """Fetches live BTC-USD spot price from Coinbase's public API."""
+  """Fetches live BTC-USD spot price via Coinbase SDK with public API fallback."""
+  if client is not None:
+    try:
+      product = client.get_product(product_id="BTC-USD")
+      if hasattr(product, "price") and float(product.price) > 0:
+        return float(product.price), "Coinbase SDK"
+      if isinstance(product, dict) and float(product.get("price", 0)) > 0:
+        return float(product["price"]), "Coinbase SDK"
+    except Exception:
+      pass
+
   try:
     resp = requests.get(
         "https://api.coinbase.com/v2/prices/BTC-USD/spot",
@@ -178,7 +177,6 @@ def get_live_btc_price() -> tuple[float, str]:
 
 
 def usd_to_sats(usd_amount: float, btc_price: float) -> int:
-  """Converts a USD dollar amount into whole Satoshis."""
   if btc_price <= 0:
     return 0
   return round((usd_amount / btc_price) * SATS_PER_BTC)
@@ -195,7 +193,6 @@ def print_next_package_tracker(
     spread_buffer: float = SPREAD_BUFFER,
     cap_sats: int = APP_CAP_SATS,
 ) -> None:
-  """Prints a 40-char progress tracker toward the next tax-inclusive package."""
   pending_apps = pending_apps if pending_apps is not None else PENDING_APPS
 
   net_pending = 0
@@ -235,7 +232,7 @@ def print_next_package_tracker(
   print(f"  NEXT PACKAGE (${package_usd:.2f} W/ TAX)")
   print("=" * 40)
   print(f"Fleet Rate: {daily_rate_sats:.2f} sats/day")
-  print(f"Coinbase:   {coinbase_sats:,} sats ({cb_status})")
+  print(f"Coinbase:   {coinbase_sats:,} sats ({cb_status[:14]})")
   print(
       f"Net Stack:  {total_net_sats:,} sats"
       f" (SW:{speed_wallet_sats:,} P:{net_pending:,})"
@@ -277,7 +274,6 @@ def calculate_satoshi_goals(
   daily_sats_needed = round(total_monthly_sats / days_in_month)
   mtd_sats_target = daily_sats_needed * current_day
 
-  # Mobile-friendly 40-char formatted output
   print("=" * 40)
   print(f"   SATOSHI EXPENSE GOAL ({now.strftime('%b %Y').upper()})")
   print("=" * 40)
@@ -313,7 +309,7 @@ if __name__ == "__main__":
       print_next_package_tracker(btc_price, cb_sats, cb_status)
       time.sleep(30)
       os.system("clear")
-    except Exception:
-      print("restarting")
+    except Exception as exc:
+      print(f"restarting ({type(exc).__name__})")
       time.sleep(30)
       os.system("clear")
