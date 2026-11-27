@@ -25,6 +25,10 @@ EXPENSES = {
     "Crunchyroll": 9.99,
     "Insurance": 6.50,
     "Celexa": 2.84,
+    "Packages": 2.13,
+    "Singles": 1.06,
+    "Package": 0.31,
+    "Single": 0.265,
 }
 
 # Next Package Tracker Config ($1.99 promo + 7% tax = $2.13)
@@ -33,7 +37,7 @@ SPREAD_BUFFER = 0.08
 FLEET_DAILY_SATS = 527.66
 APP_CAP_SATS = 2500
 
-# Match cb_monitor credentials & shared state file
+# Match cb_monitor credentials & shared JSON files
 API_KEY_NAME = os.environ.get(
     "COINBASE_API_KEY_NAME", "your_api_key_name_here"
 )
@@ -42,8 +46,10 @@ API_SECRET_KEY = os.environ.get(
 )
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATE_FILE = os.path.join(BASE_DIR, "portfolio_state.json")
+WALLET_FILE = os.path.join(BASE_DIR, "wallet_balances.json")
 CB_REFRESH_SECONDS = 60
 
+# Default fallback values if wallet_balances.json is missing
 SPEED_WALLET_SATS = 0
 PENDING_APPS = {
     "btc_cloud_mining": {"balance": 0, "fee": 5},
@@ -66,6 +72,21 @@ if (
 _last_cb_fetch_ts = 0.0
 _cached_cb_sats = 0
 _cached_cb_status = "Init"
+
+
+def load_wallet_balances() -> tuple[int, dict[str, dict[str, int]]]:
+  """Reads Speed Wallet and pending app balances from wallet_balances.json."""
+  for path in (WALLET_FILE, "wallet_balances.json"):
+    if os.path.exists(path):
+      try:
+        with open(path, "r", encoding="utf-8") as f:
+          data = json.load(f)
+        sw = int(data.get("speed_wallet_sats", SPEED_WALLET_SATS))
+        apps = data.get("pending_apps", PENDING_APPS)
+        return sw, apps
+      except Exception:
+        pass
+  return SPEED_WALLET_SATS, PENDING_APPS
 
 
 def load_btc_from_portfolio_state() -> int:
@@ -196,8 +217,8 @@ def print_next_package_tracker(
   net_pending = 0
   alerts = []
   for app_name, info in pending_apps.items():
-    bal = info.get("balance", 0)
-    fee = info.get("fee", 0)
+    bal = int(info.get("balance", 0))
+    fee = int(info.get("fee", 0))
     net_pending += max(0, bal - fee)
 
     if bal >= cap_sats * 0.85:
@@ -303,8 +324,15 @@ if __name__ == "__main__":
     try:
       btc_price, price_source = get_live_btc_price()
       cb_sats, cb_status = get_coinbase_btc_sats()
+      sw_sats, apps_bal = load_wallet_balances()
       calculate_satoshi_goals(btc_price, price_source)
-      print_next_package_tracker(btc_price, cb_sats, cb_status)
+      print_next_package_tracker(
+          btc_price,
+          cb_sats,
+          cb_status,
+          speed_wallet_sats=sw_sats,
+          pending_apps=apps_bal,
+      )
       time.sleep(30)
       os.system("clear")
     except Exception as exc:
