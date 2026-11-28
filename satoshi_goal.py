@@ -30,7 +30,7 @@ EXPENSES = {
 # Next Package Tracker Config ($1.99 promo + 7% tax = $2.13)
 NEXT_PACKAGE_USD = 2.13
 SPREAD_BUFFER = 0.08
-FLEET_DAILY_SATS = 527.66
+FLEET_DAILY_SATS = 581.29
 APP_CAP_SATS = 2500
 
 # Match cb_monitor credentials & shared JSON files
